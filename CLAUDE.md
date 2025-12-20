@@ -32,18 +32,24 @@ The project follows a clean architecture with hexagonal/ports-and-adapters patte
 ### Layers
 
 - **Domain** (`Sources/Domain/`): Pure business logic with no external dependencies
-  - Models: `AIProvider`, `UsageQuota`, `UsageSnapshot`, `QuotaStatus`, `QuotaType`
-  - Services: `QuotaMonitor` - the aggregate root actor that coordinates monitoring
-  - Ports: `UsageProbePort` (for fetching quotas), `QuotaObserverPort` (for notifications)
+  - Models: `AIProvider`, `UsageQuota`, `UsageSnapshot`, `QuotaStatus`, `QuotaType`, `QuotaDuration`
+  - Services: `QuotaMonitor` - actor that coordinates monitoring with `AsyncStream<MonitoringEvent>`
+  - Ports: `UsageProbePort` (with `ProbeError` enum), `QuotaObserverPort` (with `NoOpQuotaObserver`)
 
 - **Infrastructure** (`Sources/Infrastructure/`): Technical implementations
-  - CLI probes: `ClaudeUsageProbe`, `CodexUsageProbe`, `GeminiUsageProbe` - parse CLI output
-  - `PTYCommandRunner` - runs CLI commands with PTY for interactive prompts
-  - `NotificationQuotaObserver` - macOS notification center integration
+  - CLI (`CLI/`):
+    - `ClaudeUsageProbe` - parses Claude CLI output
+    - `CodexUsageProbe` - uses JSON-RPC via `CodexRPCClient`, falls back to TTY
+    - `GeminiUsageProbe` - coordinates `GeminiCLIProbe` and `GeminiAPIProbe` strategies
+    - `GeminiProjectRepository` - discovers Gemini projects for quota lookup
+    - `PTYCommandRunner` - runs CLI commands with PTY for interactive prompts
+  - Network (`Network/`): `NetworkClient` protocol for HTTP abstraction
+  - Notifications (`Notifications/`): `NotificationQuotaObserver` - macOS notification center
 
 - **App** (`Sources/App/`): SwiftUI menu bar application
   - Views directly consume domain models (no ViewModel layer)
   - `AppState` is an `@Observable` class shared across views
+  - `StatusBarIcon` - menu bar icon with status indicator
 
 ### Key Patterns
 

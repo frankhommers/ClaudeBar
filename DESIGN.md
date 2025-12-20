@@ -9,7 +9,7 @@ ClaudeBar is a macOS 15+ menu bar application for monitoring AI coding assistant
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                        App Layer                             │
-│  SwiftUI Views directly expose domain capabilities           │
+│  SwiftUI Views + @Observable AppState + StatusBarIcon        │
 │  (No ViewModels - rich domain models handle logic)           │
 └─────────────────────────────────────────────────────────────┘
                               │
@@ -17,15 +17,15 @@ ClaudeBar is a macOS 15+ menu bar application for monitoring AI coding assistant
 ┌─────────────────────────────────────────────────────────────┐
 │                      Domain Layer                            │
 │  Rich Models: UsageQuota, UsageSnapshot, QuotaStatus         │
-│  Ports: UsageProbePort, QuotaObserverPort (@Mockable)        │
-│  Services: QuotaMonitor (Actor)                              │
+│  Ports: UsageProbePort (ProbeError), QuotaObserverPort       │
+│  Services: QuotaMonitor (Actor + AsyncStream<MonitoringEvent>)│
 └─────────────────────────────────────────────────────────────┘
                               │
                               ▼
 ┌─────────────────────────────────────────────────────────────┐
 │                  Infrastructure Layer                        │
-│  Technical implementations: PTYCommandRunner, ClaudeUsageProbe│
-│  Adapters implement domain ports                             │
+│  CLI: Claude, Codex (RPC), Gemini (CLI+API), PTYCommandRunner│
+│  Network: NetworkClient | Notifications: QuotaObserver       │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -39,33 +39,42 @@ ClaudeBar/
 │   │   ├── Models/
 │   │   │   ├── AIProvider.swift   # Provider enum with metadata
 │   │   │   ├── UsageQuota.swift   # Rich quota model
-│   │   │   ├── QuotaType.swift    # Session/Weekly/Model types
+│   │   │   ├── QuotaType.swift    # Session/Weekly/Model types + QuotaDuration
 │   │   │   ├── QuotaStatus.swift  # Health status with thresholds
 │   │   │   └── UsageSnapshot.swift # Aggregate root
 │   │   ├── Ports/
-│   │   │   ├── UsageProbePort.swift     # @Mockable CLI interface
-│   │   │   └── QuotaObserverPort.swift  # @Mockable observer
+│   │   │   ├── UsageProbePort.swift     # @Mockable + ProbeError enum
+│   │   │   └── QuotaObserverPort.swift  # @Mockable + NoOpQuotaObserver
 │   │   └── Services/
-│   │       └── QuotaMonitor.swift # Actor-based coordinator
+│   │       └── QuotaMonitor.swift # Actor + MonitoringEvent + AsyncStream
 │   │
 │   ├── Infrastructure/            # Technical implementations
-│   │   └── CLI/
-│   │       ├── PTYCommandRunner.swift   # PTY execution
-│   │       └── ClaudeUsageProbe.swift   # Claude CLI adapter
+│   │   ├── CLI/
+│   │   │   ├── PTYCommandRunner.swift      # PTY execution
+│   │   │   ├── ClaudeUsageProbe.swift      # Claude CLI adapter
+│   │   │   ├── CodexUsageProbe.swift       # Codex RPC + TTY fallback
+│   │   │   ├── GeminiUsageProbe.swift      # CLI + API strategy coordinator
+│   │   │   └── GeminiProjectRepository.swift # Project discovery for quotas
+│   │   ├── Network/
+│   │   │   └── NetworkClient.swift         # @Mockable HTTP abstraction
+│   │   └── Notifications/
+│   │       └── NotificationQuotaObserver.swift # macOS notifications
 │   │
 │   └── App/                       # SwiftUI application
-│       ├── ClaudeBarApp.swift
+│       ├── ClaudeBarApp.swift     # Entry point + AppState
 │       └── Views/
 │           ├── MenuContentView.swift
 │           ├── ProviderSectionView.swift
-│           └── QuotaCardView.swift
+│           ├── QuotaCardView.swift
+│           └── StatusBarIcon.swift
 │
 └── Tests/
     ├── DomainTests/
     │   ├── Models/
     │   └── Services/
     └── InfrastructureTests/
-        └── CLI/
+        ├── CLI/
+        └── Notifications/
 ```
 
 ## Design Principles
