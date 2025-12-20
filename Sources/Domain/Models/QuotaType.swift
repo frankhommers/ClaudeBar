@@ -14,7 +14,7 @@ public enum QuotaType: Sendable, Equatable, Hashable {
     public var displayName: String {
         switch self {
         case .session:
-            "Current Session"
+            "Session"
         case .weekly:
             "Weekly"
         case .modelSpecific(let modelName):

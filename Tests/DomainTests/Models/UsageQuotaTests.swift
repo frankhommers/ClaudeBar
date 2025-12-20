@@ -52,7 +52,7 @@ struct UsageQuotaTests {
         let quotaType = QuotaType.session
 
         // When & Then
-        #expect(quotaType.displayName == "Current Session")
+        #expect(quotaType.displayName == "Session")
         #expect(quotaType.duration == .hours(5))
     }
 

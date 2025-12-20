@@ -204,7 +204,39 @@ public struct ClaudeUsageProbe: UsageProbePort {
 
     private func parseResetDate(_ text: String?) -> Date? {
         guard let text else { return nil }
-        // Simplified date parsing - in production would be more robust
+
+        // Parse "Resets in Xh Ym" format
+        let timePattern = #"(?i)resets?\s+in\s+(?:(\d+)\s*d)?\s*(?:(\d+)\s*h)?\s*(?:(\d+)\s*m)?"#
+        if let regex = try? NSRegularExpression(pattern: timePattern, options: []),
+           let match = regex.firstMatch(in: text, options: [], range: NSRange(text.startIndex..., in: text)) {
+            var totalSeconds: TimeInterval = 0
+
+            // Days
+            if match.range(at: 1).location != NSNotFound,
+               let r = Range(match.range(at: 1), in: text),
+               let days = Int(text[r]) {
+                totalSeconds += Double(days) * 24 * 3600
+            }
+
+            // Hours
+            if match.range(at: 2).location != NSNotFound,
+               let r = Range(match.range(at: 2), in: text),
+               let hours = Int(text[r]) {
+                totalSeconds += Double(hours) * 3600
+            }
+
+            // Minutes
+            if match.range(at: 3).location != NSNotFound,
+               let r = Range(match.range(at: 3), in: text),
+               let minutes = Int(text[r]) {
+                totalSeconds += Double(minutes) * 60
+            }
+
+            if totalSeconds > 0 {
+                return Date().addingTimeInterval(totalSeconds)
+            }
+        }
+
         return nil
     }
 

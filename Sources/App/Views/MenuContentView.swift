@@ -290,7 +290,7 @@ struct MetricCardView: View {
     let quota: UsageQuota
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: 6) {
             // Icon + Label
             HStack(spacing: 4) {
                 Image(systemName: iconName)
@@ -298,15 +298,14 @@ struct MetricCardView: View {
                     .foregroundStyle(.secondary)
 
                 Text(quota.quotaType.displayName)
-                    .font(.caption2)
+                    .font(.caption)
                     .foregroundStyle(.secondary)
-                    .lineLimit(1)
             }
 
             // Value
             Text("\(Int(quota.percentRemaining))%")
-                .font(.system(.title3, design: .rounded))
-                .fontWeight(.semibold)
+                .font(.system(.title2, design: .rounded))
+                .fontWeight(.bold)
                 .foregroundStyle(quota.status.displayColor)
 
             // Progress bar
@@ -314,14 +313,21 @@ struct MetricCardView: View {
                 ZStack(alignment: .leading) {
                     RoundedRectangle(cornerRadius: 2)
                         .fill(Color.primary.opacity(0.1))
-                        .frame(height: 3)
+                        .frame(height: 4)
 
                     RoundedRectangle(cornerRadius: 2)
                         .fill(quota.status.displayColor)
-                        .frame(width: geometry.size.width * quota.percentRemaining / 100, height: 3)
+                        .frame(width: geometry.size.width * quota.percentRemaining / 100, height: 4)
                 }
             }
-            .frame(height: 3)
+            .frame(height: 4)
+
+            // Reset time
+            if let resetDesc = quota.resetDescription {
+                Text(resetDesc)
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            }
         }
         .padding(10)
         .background(Color.primary.opacity(0.05))
