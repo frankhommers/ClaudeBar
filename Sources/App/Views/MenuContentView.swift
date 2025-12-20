@@ -1,45 +1,40 @@
 import SwiftUI
 import Domain
 
-/// The main menu content view showing quota metrics.
+/// The main menu content view with refined utilitarian design.
 struct MenuContentView: View {
     let monitor: QuotaMonitor
     let appState: AppState
 
     @State private var selectedProvider: AIProvider = .claude
+    @State private var isHoveringRefresh = false
 
     var body: some View {
         VStack(spacing: 0) {
-            // Header
+            // Header with branding
             headerView
 
-            Divider()
+            // Provider Segmented Switcher
+            providerSwitcher
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
 
-            // Metrics Grid for selected provider
-            if let snapshot = appState.snapshots[selectedProvider] {
-                metricsGridView(snapshot: snapshot)
-            } else if appState.isRefreshing {
-                loadingView
-            } else {
-                noDataView
-            }
-
-            Divider()
-
-            // Provider Switcher
-            providerSwitcherRow
+            // Metrics Content
+            metricsContent
+                .padding(.horizontal, 12)
+                .padding(.bottom, 12)
 
             Divider()
+                .padding(.horizontal, 16)
 
-            // Action Rows
-            actionRowsView
-
-            Divider()
-
-            // Footer
-            footerView
+            // Action buttons
+            actionButtons
+                .padding(.vertical, 8)
         }
-        .frame(width: 340)
+        .frame(width: 360)
+        .background(
+            VisualEffectBlur(material: .popover, blendingMode: .behindWindow)
+        )
         .task {
             await refresh()
         }
@@ -48,42 +43,76 @@ struct MenuContentView: View {
     // MARK: - Header
 
     private var headerView: some View {
-        HStack(spacing: 12) {
-            // App Icon
-            Image(systemName: "chart.bar.fill")
-                .font(.title)
-                .foregroundStyle(.primary)
+        HStack(spacing: 10) {
+            // Logo with gradient
+            ZStack {
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(
+                        LinearGradient(
+                            colors: [Color.orange, Color.orange.opacity(0.7)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .frame(width: 32, height: 32)
 
-            Text("ClaudeBar")
-                .font(.headline)
+                Image(systemName: "chart.bar.fill")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(.white)
+            }
+
+            VStack(alignment: .leading, spacing: 1) {
+                Text("ClaudeBar")
+                    .font(.system(size: 14, weight: .semibold))
+
+                Text("AI Usage Monitor")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+            }
 
             Spacer()
 
-            // Status Badge
-            statusBadge
+            // Status Pill
+            statusPill
         }
         .padding(.horizontal, 16)
-        .padding(.vertical, 12)
+        .padding(.top, 14)
+        .padding(.bottom, 10)
     }
 
-    private var statusBadge: some View {
-        HStack(spacing: 4) {
+    private var statusPill: some View {
+        HStack(spacing: 6) {
+            // Animated status dot
             Circle()
                 .fill(appState.overallStatus.displayColor)
                 .frame(width: 8, height: 8)
+                .overlay(
+                    Circle()
+                        .stroke(appState.overallStatus.displayColor.opacity(0.4), lineWidth: 2)
+                        .scaleEffect(appState.isRefreshing ? 1.8 : 1.0)
+                        .opacity(appState.isRefreshing ? 0 : 0.6)
+                        .animation(
+                            appState.isRefreshing
+                                ? .easeOut(duration: 1.0).repeatForever(autoreverses: false)
+                                : .default,
+                            value: appState.isRefreshing
+                        )
+                )
 
             Text(statusText)
-                .font(.caption)
+                .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(appState.overallStatus.displayColor)
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 4)
-        .background(appState.overallStatus.displayColor.opacity(0.15))
-        .cornerRadius(12)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 5)
+        .background(
+            Capsule()
+                .fill(appState.overallStatus.displayColor.opacity(0.12))
+        )
     }
 
     private var statusText: String {
-        if appState.isRefreshing { return "Refreshing" }
+        if appState.isRefreshing { return "Syncing..." }
         switch appState.overallStatus {
         case .healthy: return "Healthy"
         case .warning: return "Warning"
@@ -92,52 +121,66 @@ struct MenuContentView: View {
         }
     }
 
-    // MARK: - Metrics Grid
+    // MARK: - Provider Switcher (Segmented)
 
-    private func metricsGridView(snapshot: UsageSnapshot) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            // Provider indicator
-            HStack(spacing: 6) {
-                Circle()
-                    .fill(snapshot.overallStatus.displayColor)
-                    .frame(width: 8, height: 8)
+    private var providerSwitcher: some View {
+        HStack(spacing: 4) {
+            ForEach(AIProvider.allCases, id: \.self) { provider in
+                ProviderTab(
+                    provider: provider,
+                    isSelected: provider == selectedProvider,
+                    hasData: appState.snapshots[provider] != nil
+                ) {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        selectedProvider = provider
+                    }
+                }
+            }
+        }
+        .padding(4)
+        .background(
+            RoundedRectangle(cornerRadius: 10)
+                .fill(Color.primary.opacity(0.06))
+        )
+    }
 
-                Text(snapshot.provider.name)
-                    .font(.subheadline)
-                    .fontWeight(.medium)
+    // MARK: - Metrics Content
 
+    @ViewBuilder
+    private var metricsContent: some View {
+        if let snapshot = appState.snapshots[selectedProvider] {
+            VStack(spacing: 10) {
+                // Account info bar
                 if let email = snapshot.accountEmail {
-                    Spacer()
-                    Text(email)
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
+                    HStack {
+                        Image(systemName: "person.circle.fill")
+                            .font(.system(size: 12))
+                            .foregroundStyle(.secondary)
+
+                        Text(email)
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+
+                        Spacer()
+
+                        Text("Updated \(snapshot.ageDescription)")
+                            .font(.system(size: 10))
+                            .foregroundStyle(.tertiary)
+                    }
+                    .padding(.horizontal, 4)
+                }
+
+                // Metric Cards Grid
+                LazyVGrid(columns: gridColumns, spacing: 8) {
+                    ForEach(snapshot.quotas, id: \.quotaType) { quota in
+                        MetricCard(quota: quota)
+                    }
                 }
             }
-            .padding(.horizontal, 16)
-            .padding(.top, 12)
-
-            // Quota Cards Grid (3 per row)
-            LazyVGrid(columns: gridColumns, spacing: 8) {
-                ForEach(snapshot.quotas, id: \.quotaType) { quota in
-                    MetricCardView(quota: quota)
-                }
-            }
-            .padding(.horizontal, 12)
-
-            // Updated timestamp
-            HStack {
-                Text("Updated \(snapshot.ageDescription)")
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
-
-                if snapshot.isStale {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .font(.caption2)
-                        .foregroundStyle(.orange)
-                }
-            }
-            .padding(.horizontal, 16)
-            .padding(.bottom, 12)
+        } else if appState.isRefreshing {
+            loadingState
+        } else {
+            emptyState
         }
     }
 
@@ -149,118 +192,75 @@ struct MenuContentView: View {
         ]
     }
 
-    // MARK: - Loading / Empty States
-
-    private var loadingView: some View {
-        VStack(spacing: 12) {
+    private var loadingState: some View {
+        VStack(spacing: 10) {
             ProgressView()
-            Text("Loading...")
-                .font(.caption)
+                .scaleEffect(0.8)
+
+            Text("Fetching usage data...")
+                .font(.system(size: 12))
                 .foregroundStyle(.secondary)
         }
-        .frame(height: 120)
+        .frame(height: 100)
     }
 
-    private var noDataView: some View {
+    private var emptyState: some View {
         VStack(spacing: 8) {
-            Image(systemName: "chart.bar.xaxis")
-                .font(.title2)
+            Image(systemName: "exclamationmark.triangle")
+                .font(.system(size: 24))
                 .foregroundStyle(.secondary)
 
-            Text("No data available")
-                .font(.caption)
+            Text("\(selectedProvider.name) not available")
+                .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(.secondary)
 
-            Text("Install \(selectedProvider.name) CLI")
-                .font(.caption2)
+            Text("Install CLI or check configuration")
+                .font(.system(size: 10))
                 .foregroundStyle(.tertiary)
         }
-        .frame(height: 120)
+        .frame(height: 100)
     }
 
-    // MARK: - Provider Switcher
+    // MARK: - Action Buttons
 
-    private var providerSwitcherRow: some View {
-        Menu {
-            ForEach(availableProviders, id: \.self) { provider in
-                Button {
-                    selectedProvider = provider
-                } label: {
-                    HStack {
-                        Text(provider.name)
-                        if provider == selectedProvider {
-                            Image(systemName: "checkmark")
-                        }
-                    }
-                }
-            }
-        } label: {
-            ActionRow(
-                icon: "arrow.triangle.swap",
-                title: "Switch Provider",
-                value: selectedProvider.name,
-                showChevron: true
-            )
-        }
-        .buttonStyle(.plain)
-    }
-
-    private var availableProviders: [AIProvider] {
-        // Show all providers, highlight available ones
-        AIProvider.allCases
-    }
-
-    // MARK: - Action Rows
-
-    private var actionRowsView: some View {
-        VStack(spacing: 0) {
-            // Open Dashboard
-            Button {
+    private var actionButtons: some View {
+        HStack(spacing: 8) {
+            // Dashboard Button
+            ActionButton(
+                icon: "safari",
+                label: "Dashboard",
+                shortcut: "D"
+            ) {
                 if let url = selectedProvider.dashboardURL {
                     NSWorkspace.shared.open(url)
                 }
-            } label: {
-                ActionRow(
-                    icon: "safari",
-                    title: "Open Dashboard",
-                    shortcut: "D"
-                )
             }
-            .buttonStyle(.plain)
-            .keyboardShortcut("d")
 
-            Divider().padding(.horizontal, 16)
-
-            // Refresh
-            Button {
+            // Refresh Button
+            ActionButton(
+                icon: "arrow.clockwise",
+                label: "Refresh",
+                shortcut: "R",
+                isLoading: appState.isRefreshing
+            ) {
                 Task { await refresh() }
+            }
+
+            Spacer()
+
+            // Quit Button (compact)
+            Button {
+                NSApplication.shared.terminate(nil)
             } label: {
-                ActionRow(
-                    icon: "arrow.clockwise",
-                    title: "Refresh",
-                    shortcut: "R"
-                )
+                Image(systemName: "xmark.circle.fill")
+                    .font(.system(size: 18))
+                    .foregroundStyle(.secondary.opacity(0.6))
             }
             .buttonStyle(.plain)
-            .keyboardShortcut("r")
+            .help("Quit ClaudeBar (⌘Q)")
+            .keyboardShortcut("q")
         }
-    }
-
-    // MARK: - Footer
-
-    private var footerView: some View {
-        Button {
-            NSApplication.shared.terminate(nil)
-        } label: {
-            ActionRow(
-                icon: "xmark.circle",
-                title: "Quit ClaudeBar",
-                shortcut: "Q",
-                isDestructive: true
-            )
-        }
-        .buttonStyle(.plain)
-        .keyboardShortcut("q")
+        .padding(.horizontal, 16)
     }
 
     // MARK: - Actions
@@ -273,7 +273,6 @@ struct MenuContentView: View {
             appState.snapshots = try await monitor.refreshAll()
             appState.lastError = nil
 
-            // Auto-select first available provider if current has no data
             if appState.snapshots[selectedProvider] == nil,
                let first = appState.snapshots.keys.first {
                 selectedProvider = first
@@ -284,108 +283,193 @@ struct MenuContentView: View {
     }
 }
 
-// MARK: - Metric Card
+// MARK: - Provider Tab
 
-struct MetricCardView: View {
-    let quota: UsageQuota
+struct ProviderTab: View {
+    let provider: AIProvider
+    let isSelected: Bool
+    let hasData: Bool
+    let action: () -> Void
+
+    @State private var isHovering = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            // Icon + Label
-            HStack(spacing: 4) {
-                Image(systemName: iconName)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+        Button(action: action) {
+            HStack(spacing: 6) {
+                // Provider Icon
+                Image(systemName: providerIcon)
+                    .font(.system(size: 11, weight: .medium))
 
-                Text(quota.quotaType.displayName)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                Text(provider.name)
+                    .font(.system(size: 12, weight: isSelected ? .semibold : .regular))
             }
-
-            // Value
-            Text("\(Int(quota.percentRemaining))%")
-                .font(.system(.title2, design: .rounded))
-                .fontWeight(.bold)
-                .foregroundStyle(quota.status.displayColor)
-
-            // Progress bar
-            GeometryReader { geometry in
-                ZStack(alignment: .leading) {
-                    RoundedRectangle(cornerRadius: 2)
-                        .fill(Color.primary.opacity(0.1))
-                        .frame(height: 4)
-
-                    RoundedRectangle(cornerRadius: 2)
-                        .fill(quota.status.displayColor)
-                        .frame(width: geometry.size.width * quota.percentRemaining / 100, height: 4)
+            .foregroundStyle(isSelected ? .primary : .secondary)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 7)
+            .background(
+                RoundedRectangle(cornerRadius: 7)
+                    .fill(isSelected ? Color.primary.opacity(0.1) : Color.clear)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 7)
+                            .fill(isHovering && !isSelected ? Color.primary.opacity(0.04) : Color.clear)
+                    )
+            )
+            .overlay(
+                // Data indicator dot
+                Group {
+                    if hasData && !isSelected {
+                        Circle()
+                            .fill(Color.green)
+                            .frame(width: 5, height: 5)
+                            .offset(x: 20, y: -8)
+                    }
                 }
-            }
-            .frame(height: 4)
-
-            // Reset time - prefer raw resetText, fallback to computed resetDescription
-            if let resetText = quota.resetText ?? quota.resetDescription {
-                Text(resetText)
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
-            }
+            )
         }
-        .padding(10)
-        .background(Color.primary.opacity(0.05))
-        .cornerRadius(8)
+        .buttonStyle(.plain)
+        .onHover { isHovering = $0 }
     }
 
-    private var iconName: String {
-        switch quota.quotaType {
-        case .session: return "clock"
-        case .weekly: return "calendar"
-        case .modelSpecific: return "cpu"
+    private var providerIcon: String {
+        switch provider {
+        case .claude: return "brain"
+        case .codex: return "chevron.left.forwardslash.chevron.right"
+        case .gemini: return "sparkles"
         }
     }
 }
 
-// MARK: - Action Row
+// MARK: - Metric Card (Refined)
 
-struct ActionRow: View {
-    let icon: String
-    let title: String
-    var value: String? = nil
-    var shortcut: String? = nil
-    var showChevron: Bool = false
-    var isDestructive: Bool = false
+struct MetricCard: View {
+    let quota: UsageQuota
+
+    @State private var isHovering = false
 
     var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: icon)
-                .font(.body)
-                .foregroundStyle(isDestructive ? .red : .secondary)
-                .frame(width: 20)
+        VStack(alignment: .leading, spacing: 6) {
+            // Header
+            HStack(spacing: 4) {
+                Image(systemName: iconName)
+                    .font(.system(size: 9, weight: .semibold))
 
-            Text(title)
-                .foregroundStyle(isDestructive ? .red : .primary)
-
-            Spacer()
-
-            if let value {
-                Text(value)
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
+                Text(quota.quotaType.displayName)
+                    .font(.system(size: 10, weight: .medium))
             }
+            .foregroundStyle(.secondary)
 
-            if showChevron {
-                Image(systemName: "chevron.right")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
+            // Value with color
+            Text("\(Int(quota.percentRemaining))%")
+                .font(.system(size: 22, weight: .bold, design: .rounded))
+                .foregroundStyle(quota.status.displayColor)
+
+            // Progress Bar
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    // Track
+                    RoundedRectangle(cornerRadius: 2)
+                        .fill(Color.primary.opacity(0.08))
+
+                    // Fill with gradient
+                    RoundedRectangle(cornerRadius: 2)
+                        .fill(
+                            LinearGradient(
+                                colors: [quota.status.displayColor, quota.status.displayColor.opacity(0.7)],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        )
+                        .frame(width: geo.size.width * quota.percentRemaining / 100)
+                }
             }
+            .frame(height: 4)
 
-            if let shortcut {
-                Text("⌘\(shortcut)")
-                    .font(.caption)
+            // Reset info
+            if let resetText = quota.resetText ?? quota.resetDescription {
+                Text(resetText)
+                    .font(.system(size: 9))
                     .foregroundStyle(.tertiary)
+                    .lineLimit(1)
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
-        .contentShape(Rectangle())
-        .background(Color.clear)
+        .padding(10)
+        .background(
+            RoundedRectangle(cornerRadius: 10)
+                .fill(Color.primary.opacity(isHovering ? 0.08 : 0.04))
+                .animation(.easeInOut(duration: 0.15), value: isHovering)
+        )
+        .onHover { isHovering = $0 }
+    }
+
+    private var iconName: String {
+        switch quota.quotaType {
+        case .session: return "clock.fill"
+        case .weekly: return "calendar"
+        case .modelSpecific: return "cpu.fill"
+        }
+    }
+}
+
+// MARK: - Action Button
+
+struct ActionButton: View {
+    let icon: String
+    let label: String
+    let shortcut: String
+    var isLoading: Bool = false
+    let action: () -> Void
+
+    @State private var isHovering = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                if isLoading {
+                    ProgressView()
+                        .scaleEffect(0.5)
+                        .frame(width: 14, height: 14)
+                } else {
+                    Image(systemName: icon)
+                        .font(.system(size: 12))
+                }
+
+                Text(label)
+                    .font(.system(size: 12, weight: .medium))
+
+                Text("⌘\(shortcut)")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.tertiary)
+            }
+            .foregroundStyle(isHovering ? .primary : .secondary)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 7)
+            .background(
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(Color.primary.opacity(isHovering ? 0.08 : 0.04))
+            )
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovering = $0 }
+        .keyboardShortcut(KeyEquivalent(Character(shortcut.lowercased())), modifiers: .command)
+    }
+}
+
+// MARK: - Visual Effect Blur (macOS)
+
+struct VisualEffectBlur: NSViewRepresentable {
+    let material: NSVisualEffectView.Material
+    let blendingMode: NSVisualEffectView.BlendingMode
+
+    func makeNSView(context: Context) -> NSVisualEffectView {
+        let view = NSVisualEffectView()
+        view.material = material
+        view.blendingMode = blendingMode
+        view.state = .active
+        return view
+    }
+
+    func updateNSView(_ nsView: NSVisualEffectView, context: Context) {
+        nsView.material = material
+        nsView.blendingMode = blendingMode
     }
 }
