@@ -3,6 +3,7 @@
 [![Build](https://github.com/tddworks/ClaudeBar/actions/workflows/build.yml/badge.svg)](https://github.com/tddworks/ClaudeBar/actions/workflows/build.yml)
 [![Tests](https://github.com/tddworks/ClaudeBar/actions/workflows/tests.yml/badge.svg)](https://github.com/tddworks/ClaudeBar/actions/workflows/tests.yml)
 [![codecov](https://codecov.io/gh/tddworks/ClaudeBar/graph/badge.svg)](https://codecov.io/gh/tddworks/ClaudeBar)
+[![Latest Release](https://img.shields.io/github/v/release/tddworks/ClaudeBar)](https://github.com/tddworks/ClaudeBar/releases/latest)
 [![Swift 6.2](https://img.shields.io/badge/Swift-6.2-orange.svg)](https://swift.org)
 [![Platform](https://img.shields.io/badge/Platform-macOS%2015-blue.svg)](https://developer.apple.com)
 
@@ -38,6 +39,17 @@ A macOS menu bar application that monitors AI coding assistant usage quotas. Kee
   - [Gemini CLI](https://github.com/google-gemini/gemini-cli) (`gemini`)
 
 ## Installation
+
+### Download (Recommended)
+
+Download the latest release from [GitHub Releases](https://github.com/tddworks/ClaudeBar/releases/latest):
+
+- **DMG**: Open and drag ClaudeBar.app to Applications
+- **ZIP**: Unzip and move ClaudeBar.app to Applications
+
+Both are code-signed and notarized for Gatekeeper.
+
+### Build from Source
 
 ```bash
 git clone https://github.com/tddworks/ClaudeBar.git
@@ -106,6 +118,64 @@ ClaudeBar follows Clean Architecture with hexagonal/ports-and-adapters patterns:
 
 - [Sparkle](https://sparkle-project.org/) - Auto-update framework
 - [Mockable](https://github.com/Kolos65/Mockable) - Protocol mocking for tests
+
+## Releasing
+
+Releases are automated via GitHub Actions. Push a version tag to create a new release.
+
+### Prerequisites
+
+Add these secrets to your GitHub repository (Settings → Secrets → Actions):
+
+| Secret                         | Description                                    |
+|--------------------------------|------------------------------------------------|
+| `APPLE_CERTIFICATE_P12`        | Developer ID Application certificate (base64) |
+| `APPLE_CERTIFICATE_PASSWORD`   | Password for the .p12 file                     |
+| `APP_STORE_CONNECT_API_KEY_P8` | App Store Connect API key (base64)             |
+| `APP_STORE_CONNECT_KEY_ID`     | API Key ID                                     |
+| `APP_STORE_CONNECT_ISSUER_ID`  | Issuer ID                                      |
+
+### Getting the Certificate Secrets
+
+1. Open **Keychain Access** on your Mac
+2. Find `Developer ID Application: Your Name (TEAM_ID)` in **My Certificates**
+3. Right-click → **Export** → Save as `.p12` with a password
+4. Convert to base64:
+   ```bash
+   base64 -i certificate.p12 | pbcopy
+   ```
+5. Add to GitHub as `APPLE_CERTIFICATE_P12`
+6. Add the password as `APPLE_CERTIFICATE_PASSWORD`
+
+### Getting the App Store Connect Secrets
+
+1. Go to [App Store Connect API Keys](https://appstoreconnect.apple.com/access/api)
+2. Create a new key with **Developer** role
+3. Download the `.p8` file (shown only once!)
+4. Note the **Key ID** and **Issuer ID**
+5. Convert to base64:
+   ```bash
+   base64 -i AuthKey_XXXXXX.p8 | pbcopy
+   ```
+6. Add to GitHub:
+   - `APP_STORE_CONNECT_API_KEY_P8` → the base64 string
+   - `APP_STORE_CONNECT_KEY_ID` → the Key ID
+   - `APP_STORE_CONNECT_ISSUER_ID` → the Issuer ID
+
+### Creating a Release
+
+```bash
+# Tag and push
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+The workflow will automatically:
+- Build a universal binary (Intel + Apple Silicon)
+- Sign with Developer ID
+- Notarize with Apple
+- Create DMG and ZIP with checksums
+- Publish to GitHub Releases
 
 ## License
 
