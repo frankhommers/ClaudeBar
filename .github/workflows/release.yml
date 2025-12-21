@@ -1,0 +1,338 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., 1.0.0)'
+        required: true
+        type: string
+
+env:
+  APP_NAME: ClaudeBar
+  BUNDLE_ID: com.tddworks.claudebar
+  SWIFT_VERSION: "6.2"
+
+jobs:
+  release:
+    name: Build, Sign, Notarize & Release
+    runs-on: macos-15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Swift
+        uses: SwiftyLab/setup-swift@latest
+        with:
+          swift-version: ${{ env.SWIFT_VERSION }}
+
+      - name: Extract Version
+        id: version
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            VERSION="${GITHUB_REF#refs/tags/v}"
+          fi
+
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Error: Invalid version format: $VERSION (expected X.Y.Z)"
+            exit 1
+          fi
+
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Version: $VERSION"
+
+      - name: Update Info.plist Version
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          INFO_PLIST="Sources/App/Info.plist"
+          BUILD_NUMBER=$(git rev-list --count HEAD)
+
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" "$INFO_PLIST"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD_NUMBER" "$INFO_PLIST"
+
+          echo "Updated version to $VERSION (build $BUILD_NUMBER)"
+
+      - name: Resolve Dependencies
+        run: swift package resolve
+
+      - name: Build Release
+        run: swift build -c release --arch arm64 --arch x86_64
+
+      - name: Create App Bundle
+        run: |
+          APP_BUNDLE="${APP_NAME}.app"
+          CONTENTS="$APP_BUNDLE/Contents"
+          MACOS="$CONTENTS/MacOS"
+          RESOURCES="$CONTENTS/Resources"
+          FRAMEWORKS="$CONTENTS/Frameworks"
+
+          mkdir -p "$MACOS" "$RESOURCES" "$FRAMEWORKS"
+
+          # Copy universal binary (use same arch flags as build step)
+          BIN_PATH=$(swift build -c release --arch arm64 --arch x86_64 --show-bin-path)
+          cp "$BIN_PATH/$APP_NAME" "$MACOS/"
+
+          # Copy Info.plist
+          cp Sources/App/Info.plist "$CONTENTS/"
+
+          # Copy Sparkle framework if present
+          SPARKLE_PATHS=(
+            ".build/artifacts/sparkle/Sparkle/Sparkle.xcframework/macos-arm64_x86_64/Sparkle.framework"
+            ".build/checkouts/Sparkle/Sparkle.xcframework/macos-arm64_x86_64/Sparkle.framework"
+          )
+          for SPARKLE_PATH in "${SPARKLE_PATHS[@]}"; do
+            if [ -d "$SPARKLE_PATH" ]; then
+              cp -R "$SPARKLE_PATH" "$FRAMEWORKS/"
+              echo "Copied Sparkle framework from $SPARKLE_PATH"
+              break
+            fi
+          done
+
+          # Create PkgInfo
+          echo "APPL????" > "$CONTENTS/PkgInfo"
+
+          echo "Created app bundle at $APP_BUNDLE"
+          ls -la "$CONTENTS"
+
+      - name: Create Entitlements
+        run: |
+          cat > entitlements.plist << 'EOF'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+              <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+              <true/>
+              <key>com.apple.security.cs.disable-library-validation</key>
+              <true/>
+              <key>com.apple.security.automation.apple-events</key>
+              <true/>
+              <key>com.apple.security.network.client</key>
+              <true/>
+          </dict>
+          </plist>
+          EOF
+
+      - name: Setup Code Signing
+        env:
+          APPLE_CERTIFICATE_P12: ${{ secrets.APPLE_CERTIFICATE_P12 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        run: |
+          CERT_PATH="$RUNNER_TEMP/certificate.p12"
+          KEYCHAIN_PATH="$RUNNER_TEMP/app-signing.keychain-db"
+          KEYCHAIN_PASSWORD=$(openssl rand -base64 32)
+
+          # Create file with restrictive permissions before writing secret
+          touch "$CERT_PATH" && chmod 600 "$CERT_PATH"
+          echo "$APPLE_CERTIFICATE_P12" | base64 --decode > "$CERT_PATH"
+          echo "CERT_PATH=$CERT_PATH" >> $GITHUB_ENV
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          security import "$CERT_PATH" \
+            -P "$APPLE_CERTIFICATE_PASSWORD" \
+            -A \
+            -t cert \
+            -f pkcs12 \
+            -k "$KEYCHAIN_PATH"
+
+          security list-keychain -d user -s "$KEYCHAIN_PATH"
+          security set-key-partition-list \
+            -S apple-tool:,apple: \
+            -k "$KEYCHAIN_PASSWORD" \
+            "$KEYCHAIN_PATH"
+
+          # Find and store the signing identity
+          IDENTITY=$(security find-identity -v -p codesigning "$KEYCHAIN_PATH" | grep "Developer ID Application" | head -1 | awk -F '"' '{print $2}')
+          if [ -z "$IDENTITY" ]; then
+            echo "Error: No Developer ID Application certificate found"
+            security find-identity -v -p codesigning "$KEYCHAIN_PATH"
+            exit 1
+          fi
+
+          echo "Found signing identity: $IDENTITY"
+          echo "SIGNING_IDENTITY=$IDENTITY" >> $GITHUB_ENV
+          echo "KEYCHAIN_PATH=$KEYCHAIN_PATH" >> $GITHUB_ENV
+          echo "KEYCHAIN_PASSWORD=$KEYCHAIN_PASSWORD" >> $GITHUB_ENV
+
+      - name: Sign App Bundle
+        run: |
+          APP_BUNDLE="${APP_NAME}.app"
+
+          # Sign Sparkle framework components if present
+          if [ -d "$APP_BUNDLE/Contents/Frameworks/Sparkle.framework" ]; then
+            echo "Signing Sparkle framework..."
+
+            # Sign XPC services if present
+            find "$APP_BUNDLE/Contents/Frameworks/Sparkle.framework" -name "*.xpc" -type d | while read xpc; do
+              codesign --force --sign "$SIGNING_IDENTITY" --timestamp --options runtime "$xpc"
+            done
+
+            # Sign helper apps
+            find "$APP_BUNDLE/Contents/Frameworks/Sparkle.framework" -name "*.app" -type d | while read app; do
+              codesign --force --sign "$SIGNING_IDENTITY" --timestamp --options runtime "$app"
+            done
+
+            # Sign the framework itself
+            codesign --force --sign "$SIGNING_IDENTITY" --timestamp --options runtime \
+              "$APP_BUNDLE/Contents/Frameworks/Sparkle.framework"
+          fi
+
+          # Sign main executable with entitlements
+          codesign --force --sign "$SIGNING_IDENTITY" \
+            --entitlements entitlements.plist \
+            --timestamp \
+            --options runtime \
+            "$APP_BUNDLE/Contents/MacOS/$APP_NAME"
+
+          # Sign app bundle
+          codesign --force --sign "$SIGNING_IDENTITY" \
+            --entitlements entitlements.plist \
+            --timestamp \
+            --options runtime \
+            "$APP_BUNDLE"
+
+          # Verify signature
+          echo "Verifying signature..."
+          codesign --verify --deep --strict --verbose=2 "$APP_BUNDLE"
+
+      - name: Create ZIP for Notarization
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          ZIP_FILE="${APP_NAME}-${VERSION}.zip"
+
+          ditto -c -k --keepParent "${APP_NAME}.app" "$ZIP_FILE"
+
+          echo "ZIP_FILE=$ZIP_FILE" >> $GITHUB_ENV
+
+      - name: Notarize App
+        env:
+          APP_STORE_CONNECT_API_KEY_P8: ${{ secrets.APP_STORE_CONNECT_API_KEY_P8 }}
+          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+        run: |
+          API_KEY_PATH="$RUNNER_TEMP/AuthKey_${APP_STORE_CONNECT_KEY_ID}.p8"
+          # Create file with restrictive permissions before writing secret
+          touch "$API_KEY_PATH" && chmod 600 "$API_KEY_PATH"
+          echo "$APP_STORE_CONNECT_API_KEY_P8" | base64 --decode > "$API_KEY_PATH"
+          echo "API_KEY_PATH=$API_KEY_PATH" >> $GITHUB_ENV
+
+          echo "Submitting for notarization..."
+          xcrun notarytool submit "$ZIP_FILE" \
+            --key "$API_KEY_PATH" \
+            --key-id "$APP_STORE_CONNECT_KEY_ID" \
+            --issuer "$APP_STORE_CONNECT_ISSUER_ID" \
+            --wait \
+            --timeout 30m
+
+          echo "Stapling notarization ticket..."
+          xcrun stapler staple "${APP_NAME}.app"
+
+          echo "Verifying notarization..."
+          xcrun stapler validate "${APP_NAME}.app"
+
+      - name: Create Notarized ZIP
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          NOTARIZED_ZIP="${APP_NAME}-${VERSION}.zip"
+
+          # Recreate ZIP with stapled app
+          rm -f "$NOTARIZED_ZIP"
+          ditto -c -k --keepParent "${APP_NAME}.app" "$NOTARIZED_ZIP"
+
+          shasum -a 256 "$NOTARIZED_ZIP" > "${NOTARIZED_ZIP}.sha256"
+
+          echo "NOTARIZED_ZIP=$NOTARIZED_ZIP" >> $GITHUB_ENV
+
+      - name: Create DMG
+        run: |
+          brew install create-dmg
+
+          VERSION="${{ steps.version.outputs.version }}"
+          DMG_FILE="${APP_NAME}-${VERSION}.dmg"
+
+          # Create DMG (create-dmg may return non-zero even on success)
+          create-dmg \
+            --volname "$APP_NAME" \
+            --window-pos 200 120 \
+            --window-size 600 400 \
+            --icon-size 100 \
+            --icon "${APP_NAME}.app" 150 190 \
+            --hide-extension "${APP_NAME}.app" \
+            --app-drop-link 450 185 \
+            --no-internet-enable \
+            "$DMG_FILE" \
+            "${APP_NAME}.app" || true
+
+          if [ ! -f "$DMG_FILE" ]; then
+            echo "Error: DMG creation failed"
+            exit 1
+          fi
+
+          # Sign DMG
+          codesign --force --sign "$SIGNING_IDENTITY" --timestamp "$DMG_FILE"
+
+          shasum -a 256 "$DMG_FILE" > "${DMG_FILE}.sha256"
+
+          echo "DMG_FILE=$DMG_FILE" >> $GITHUB_ENV
+
+          echo "Created DMG:"
+          ls -lh "$DMG_FILE"
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.version.outputs.version }}
+          name: ClaudeBar v${{ steps.version.outputs.version }}
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          files: |
+            ${{ env.NOTARIZED_ZIP }}
+            ${{ env.NOTARIZED_ZIP }}.sha256
+            ${{ env.DMG_FILE }}
+            ${{ env.DMG_FILE }}.sha256
+          body: |
+            ## ClaudeBar v${{ steps.version.outputs.version }}
+
+            ### Installation
+
+            **Option 1: DMG (Recommended)**
+            1. Download `${{ env.DMG_FILE }}`
+            2. Open the DMG and drag ClaudeBar.app to Applications
+            3. Launch from Applications folder
+
+            **Option 2: ZIP**
+            1. Download `${{ env.NOTARIZED_ZIP }}`
+            2. Unzip and move ClaudeBar.app to Applications
+            3. Launch from Applications folder
+
+            ### Verification
+
+            SHA256 checksums are provided. Verify with:
+            ```bash
+            shasum -a 256 -c ClaudeBar-${{ steps.version.outputs.version }}.zip.sha256
+            ```
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Cleanup
+        if: always()
+        run: |
+          # Remove keychain
+          if [ -n "$KEYCHAIN_PATH" ] && [ -f "$KEYCHAIN_PATH" ]; then
+            security delete-keychain "$KEYCHAIN_PATH" || true
+          fi
+          # Remove sensitive files
+          rm -f "$CERT_PATH" || true
+          rm -f "$API_KEY_PATH" || true
+          rm -f "$RUNNER_TEMP/certificate.p12" || true
+          rm -f "$RUNNER_TEMP/AuthKey_"*.p8 || true
