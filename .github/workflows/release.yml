@@ -270,27 +270,43 @@ jobs:
       - name: Sign App Bundle
         run: |
           APP_BUNDLE="${APP_NAME}.app"
+          SPARKLE_FW="$APP_BUNDLE/Contents/Frameworks/Sparkle.framework"
 
           # Sign Sparkle framework components if present
-          if [ -d "$APP_BUNDLE/Contents/Frameworks/Sparkle.framework" ]; then
-            echo "Signing Sparkle framework..."
+          if [ -d "$SPARKLE_FW" ]; then
+            echo "Signing Sparkle framework components..."
 
-            # Sign XPC services if present
-            find "$APP_BUNDLE/Contents/Frameworks/Sparkle.framework" -name "*.xpc" -type d | while read xpc; do
+            # Sign ALL executables in the framework (Autoupdate, etc.)
+            find "$SPARKLE_FW" -type f -perm +111 ! -name "*.dylib" | while read exe; do
+              echo "Signing executable: $exe"
+              codesign --force --sign "$SIGNING_IDENTITY" --timestamp --options runtime "$exe"
+            done
+
+            # Sign all dylibs
+            find "$SPARKLE_FW" -name "*.dylib" -type f | while read dylib; do
+              echo "Signing dylib: $dylib"
+              codesign --force --sign "$SIGNING_IDENTITY" --timestamp --options runtime "$dylib"
+            done
+
+            # Sign XPC services
+            find "$SPARKLE_FW" -name "*.xpc" -type d | while read xpc; do
+              echo "Signing XPC: $xpc"
               codesign --force --sign "$SIGNING_IDENTITY" --timestamp --options runtime "$xpc"
             done
 
             # Sign helper apps
-            find "$APP_BUNDLE/Contents/Frameworks/Sparkle.framework" -name "*.app" -type d | while read app; do
+            find "$SPARKLE_FW" -name "*.app" -type d | while read app; do
+              echo "Signing app: $app"
               codesign --force --sign "$SIGNING_IDENTITY" --timestamp --options runtime "$app"
             done
 
             # Sign the framework itself
-            codesign --force --sign "$SIGNING_IDENTITY" --timestamp --options runtime \
-              "$APP_BUNDLE/Contents/Frameworks/Sparkle.framework"
+            echo "Signing Sparkle framework..."
+            codesign --force --sign "$SIGNING_IDENTITY" --timestamp --options runtime "$SPARKLE_FW"
           fi
 
           # Sign main executable with entitlements
+          echo "Signing main executable..."
           codesign --force --sign "$SIGNING_IDENTITY" \
             --entitlements entitlements.plist \
             --timestamp \
@@ -298,6 +314,7 @@ jobs:
             "$APP_BUNDLE/Contents/MacOS/$APP_NAME"
 
           # Sign app bundle
+          echo "Signing app bundle..."
           codesign --force --sign "$SIGNING_IDENTITY" \
             --entitlements entitlements.plist \
             --timestamp \
@@ -305,6 +322,7 @@ jobs:
             "$APP_BUNDLE"
 
           # Verify signature
+          echo ""
           echo "Verifying signature..."
           codesign --verify --deep --strict --verbose=2 "$APP_BUNDLE"
 
@@ -323,50 +341,68 @@ jobs:
           APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
           APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
         run: |
+          # Setup API key file
           API_KEY_PATH="$RUNNER_TEMP/AuthKey_${APP_STORE_CONNECT_KEY_ID}.p8"
-          touch "$API_KEY_PATH" && chmod 600 "$API_KEY_PATH"
           echo "$APP_STORE_CONNECT_API_KEY_P8" | base64 --decode > "$API_KEY_PATH"
-          echo "API_KEY_PATH=$API_KEY_PATH" >> $GITHUB_ENV
 
           echo "Submitting for notarization..."
 
-          # Submit and capture output to get submission ID
-          SUBMIT_OUTPUT=$(xcrun notarytool submit "$ZIP_FILE" \
+          # Disable exit on error temporarily to ensure cleanup
+          set +e
+
+          # Submit for notarization
+          xcrun notarytool submit "$ZIP_FILE" \
             --key "$API_KEY_PATH" \
             --key-id "$APP_STORE_CONNECT_KEY_ID" \
             --issuer "$APP_STORE_CONNECT_ISSUER_ID" \
+            --output-format json \
             --wait \
-            --timeout 30m 2>&1) || true
+            --timeout 30m > notarization-result.json 2>&1
 
-          echo "$SUBMIT_OUTPUT"
+          NOTARIZE_STATUS=$?
 
-          # Extract submission ID
-          SUBMISSION_ID=$(echo "$SUBMIT_OUTPUT" | grep "id:" | head -1 | awk '{print $2}')
+          # Re-enable exit on error
+          set -e
+
+          # Show result
+          echo "=== Notarization Result ==="
+          cat notarization-result.json
+
+          # Extract submission ID and status
+          SUBMISSION_ID=$(cat notarization-result.json | grep -o '"id"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | cut -d'"' -f4)
+          STATUS=$(cat notarization-result.json | grep -o '"status"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | cut -d'"' -f4)
+
           echo "Submission ID: $SUBMISSION_ID"
+          echo "Status: $STATUS"
 
-          # Check if notarization succeeded
-          if echo "$SUBMIT_OUTPUT" | grep -q "status: Accepted"; then
-            echo "Notarization ACCEPTED"
-          else
+          # If failed, get the log
+          if [ "$STATUS" != "Accepted" ]; then
             echo ""
             echo "=========================================="
-            echo "Notarization FAILED - Fetching log..."
+            echo "Notarization FAILED - Fetching detailed log..."
             echo "=========================================="
 
-            # Fetch the notarization log
             if [ -n "$SUBMISSION_ID" ]; then
               xcrun notarytool log "$SUBMISSION_ID" \
                 --key "$API_KEY_PATH" \
                 --key-id "$APP_STORE_CONNECT_KEY_ID" \
                 --issuer "$APP_STORE_CONNECT_ISSUER_ID" \
-                notarization-log.json || true
+                notarization-log.json 2>&1 || true
 
               echo ""
-              echo "=== Notarization Log ==="
-              cat notarization-log.json || true
+              echo "=== Detailed Notarization Log ==="
+              cat notarization-log.json 2>/dev/null || echo "Could not fetch log"
             fi
+
+            # Cleanup
+            rm -f "$API_KEY_PATH"
             exit 1
           fi
+
+          echo "Notarization ACCEPTED!"
+
+          # Cleanup API key
+          rm -f "$API_KEY_PATH"
 
           echo "Stapling notarization ticket..."
           xcrun stapler staple "${APP_NAME}.app"
