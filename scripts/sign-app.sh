@@ -44,7 +44,7 @@ if [ ! -f "$ENTITLEMENTS" ]; then
 fi
 
 APP_NAME=$(basename "$APP_BUNDLE" .app)
-SPARKLE_FW="$APP_BUNDLE/Contents/Frameworks/Sparkle.framework"
+FRAMEWORKS_DIR="$APP_BUNDLE/Contents/Frameworks"
 
 echo "========================================"
 echo "  Signing $APP_NAME"
@@ -55,37 +55,14 @@ echo "Identity:    $SIGNING_IDENTITY"
 echo "Entitlements: $ENTITLEMENTS"
 echo ""
 
-# Sign Sparkle framework components if present
-if [ -d "$SPARKLE_FW" ]; then
-    echo "--- Signing Sparkle framework components ---"
-
-    # Sign ALL executables in the framework (Autoupdate, etc.)
-    find "$SPARKLE_FW" -type f -perm +111 ! -name "*.dylib" | while read exe; do
-        echo "Signing executable: $(basename "$exe")"
-        codesign --force --sign "$SIGNING_IDENTITY" --timestamp --options runtime "$exe"
+# Sign all frameworks (--deep signs all nested components)
+if [ -d "$FRAMEWORKS_DIR" ]; then
+    for framework in "$FRAMEWORKS_DIR"/*.framework; do
+        if [ -d "$framework" ]; then
+            echo "--- Signing $(basename "$framework") ---"
+            codesign --force --deep --sign "$SIGNING_IDENTITY" --timestamp --options runtime "$framework"
+        fi
     done
-
-    # Sign all dylibs
-    find "$SPARKLE_FW" -name "*.dylib" -type f | while read dylib; do
-        echo "Signing dylib: $(basename "$dylib")"
-        codesign --force --sign "$SIGNING_IDENTITY" --timestamp --options runtime "$dylib"
-    done
-
-    # Sign XPC services
-    find "$SPARKLE_FW" -name "*.xpc" -type d | while read xpc; do
-        echo "Signing XPC: $(basename "$xpc")"
-        codesign --force --sign "$SIGNING_IDENTITY" --timestamp --options runtime "$xpc"
-    done
-
-    # Sign helper apps
-    find "$SPARKLE_FW" -name "*.app" -type d | while read app; do
-        echo "Signing app: $(basename "$app")"
-        codesign --force --sign "$SIGNING_IDENTITY" --timestamp --options runtime "$app"
-    done
-
-    # Sign the framework itself
-    echo "Signing Sparkle.framework..."
-    codesign --force --sign "$SIGNING_IDENTITY" --timestamp --options runtime "$SPARKLE_FW"
     echo ""
 fi
 
