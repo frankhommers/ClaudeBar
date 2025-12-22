@@ -1,29 +1,8 @@
 import Foundation
 import Domain
-import Mockable
 import os.log
 
 private let logger = Logger(subsystem: "com.claudebar", category: "CopilotUsageProbe")
-
-/// Protocol for providing GitHub credentials
-@Mockable
-public protocol GitHubCredentialProvider: Sendable {
-    func getToken() -> String?
-    func getUsername() -> String?
-}
-
-/// Default credential provider that uses KeychainService
-public struct KeychainCredentialProvider: GitHubCredentialProvider {
-    public init() {}
-
-    public func getToken() -> String? {
-        KeychainService.shared.getToken(for: KeychainService.Account.githubCopilotToken)
-    }
-
-    public func getUsername() -> String? {
-        UserDefaults.standard.string(forKey: "githubUsername")
-    }
-}
 
 /// Probe for fetching GitHub Copilot usage data via GitHub Billing API.
 ///
@@ -33,7 +12,7 @@ public struct KeychainCredentialProvider: GitHubCredentialProvider {
 /// Requires a fine-grained PAT with "Plan: read" permission.
 public struct CopilotUsageProbe: UsageProbe {
     private let networkClient: any NetworkClient
-    private let credentialProvider: any GitHubCredentialProvider
+    private let credentialStore: any CredentialStore
     private let timeout: TimeInterval
 
     private static let apiBaseURL = "https://api.github.com"
@@ -41,17 +20,17 @@ public struct CopilotUsageProbe: UsageProbe {
 
     public init(
         networkClient: any NetworkClient = URLSession.shared,
-        credentialProvider: any GitHubCredentialProvider = KeychainCredentialProvider(),
+        credentialStore: any CredentialStore = UserDefaultsCredentialStore.shared,
         timeout: TimeInterval = 30
     ) {
         self.networkClient = networkClient
-        self.credentialProvider = credentialProvider
+        self.credentialStore = credentialStore
         self.timeout = timeout
     }
 
     public func isAvailable() async -> Bool {
-        guard let token = credentialProvider.getToken(),
-              let username = credentialProvider.getUsername(),
+        guard let token = credentialStore.get(forKey: CredentialKey.githubToken),
+              let username = credentialStore.get(forKey: CredentialKey.githubUsername),
               !token.isEmpty,
               !username.isEmpty else {
             logger.debug("Copilot: Not available - missing token or username")
@@ -61,12 +40,12 @@ public struct CopilotUsageProbe: UsageProbe {
     }
 
     public func probe() async throws -> UsageSnapshot {
-        guard let token = credentialProvider.getToken(), !token.isEmpty else {
+        guard let token = credentialStore.get(forKey: CredentialKey.githubToken), !token.isEmpty else {
             logger.error("Copilot: No GitHub token configured")
             throw ProbeError.authenticationRequired
         }
 
-        guard let username = credentialProvider.getUsername(), !username.isEmpty else {
+        guard let username = credentialStore.get(forKey: CredentialKey.githubUsername), !username.isEmpty else {
             logger.error("Copilot: No GitHub username configured")
             throw ProbeError.executionFailed("GitHub username not configured")
         }
@@ -82,14 +61,9 @@ public struct CopilotUsageProbe: UsageProbe {
 
     // MARK: - API Calls
 
-    private func fetchBillingUsage(username: String, token: String) async throws -> BillingUsageResponse {
-        // Get current month's usage
-        let now = Date()
-        let calendar = Calendar.current
-        let year = calendar.component(.year, from: now)
-        let month = calendar.component(.month, from: now)
-
-        let urlString = "\(Self.apiBaseURL)/users/\(username)/settings/billing/usage?year=\(year)&month=\(month)"
+    private func fetchBillingUsage(username: String, token: String) async throws -> PremiumRequestUsageResponse {
+        // Use premium_request/usage endpoint - specific for Copilot, returns current month
+        let urlString = "\(Self.apiBaseURL)/users/\(username)/settings/billing/premium_request/usage"
 
         guard let url = URL(string: urlString) else {
             throw ProbeError.executionFailed("Invalid URL")
@@ -127,58 +101,59 @@ public struct CopilotUsageProbe: UsageProbe {
             throw ProbeError.executionFailed("HTTP error: \(httpResponse.statusCode)")
         }
 
+        // Log raw response for debugging
+        if let rawString = String(data: data, encoding: .utf8) {
+            logger.debug("Copilot raw response: \(rawString.prefix(1000))")
+        }
+
         do {
-            return try JSONDecoder().decode(BillingUsageResponse.self, from: data)
+            return try JSONDecoder().decode(PremiumRequestUsageResponse.self, from: data)
         } catch {
             logger.error("Copilot: Failed to parse response - \(error.localizedDescription)")
-            // Log raw response for debugging
-            if let rawString = String(data: data, encoding: .utf8) {
-                logger.debug("Raw response: \(rawString.prefix(500))")
-            }
             throw ProbeError.parseFailed("Failed to parse billing response: \(error.localizedDescription)")
         }
     }
 
     // MARK: - Response Parsing
 
-    private func parseUsageResponse(_ response: BillingUsageResponse, username: String) throws -> UsageSnapshot {
-        // Filter for Copilot usage items
-        let copilotItems = response.usageItems.filter { item in
-            item.product?.lowercased().contains("copilot") == true
+    private func parseUsageResponse(_ response: PremiumRequestUsageResponse, username: String) throws -> UsageSnapshot {
+        let items = response.usageItems
+
+        // Filter for Copilot items (product contains 'copilot', case-insensitive)
+        let copilotItems = items.filter { item in
+            guard let product = item.product?.lowercased() else { return false }
+            return product.contains("copilot")
         }
 
-        logger.debug("Copilot: Found \(copilotItems.count) Copilot usage items")
+        logger.debug("Copilot: Found \(copilotItems.count) Copilot items for \(response.timePeriod.month)/\(response.timePeriod.year)")
+
+        // Log model breakdown
+        let modelBreakdown = Dictionary(grouping: copilotItems) { $0.model ?? "Unknown" }
+            .mapValues { items in items.reduce(0) { $0 + ($1.grossQuantity ?? 0) } }
+        logger.debug("Copilot models: \(modelBreakdown)")
 
         // Calculate totals
-        var totalQuantity: Double = 0
-        var totalNetAmount: Double = 0
-        var totalDiscountAmount: Double = 0
+        let totalGrossQuantity = copilotItems.reduce(0.0) { $0 + ($1.grossQuantity ?? 0) }
+        let totalDiscountQuantity = copilotItems.reduce(0.0) { $0 + ($1.discountQuantity ?? 0) }
+        let totalNetQuantity = copilotItems.reduce(0.0) { $0 + ($1.netQuantity ?? 0) }
+        let totalNetAmount = copilotItems.reduce(0.0) { $0 + ($1.netAmount ?? 0) }
 
-        for item in copilotItems {
-            totalQuantity += item.quantity ?? 0
-            totalNetAmount += item.netAmount ?? 0
-            totalDiscountAmount += item.discountAmount ?? 0
-        }
+        logger.debug("Copilot: gross=\(Int(totalGrossQuantity)), discount=\(Int(totalDiscountQuantity)), net=\(Int(totalNetQuantity)), amount=\(totalNetAmount)")
 
-        // Calculate included units from discount
-        // Assumes a price per unit to derive included quota
-        let pricePerUnit: Double = 0.04 // Premium request price (approximate)
-        let includedUnits = totalDiscountAmount > 0 ? totalDiscountAmount / pricePerUnit : 2500 // Default free tier
+        // GitHub Copilot Free tier: ~2000 premium requests/month
+        let monthlyLimit: Double = 2000
+        let used = totalGrossQuantity
+        let remaining = max(0, monthlyLimit - used)
+        let percentRemaining = (remaining / monthlyLimit) * 100
 
-        // Calculate percentage remaining
-        let totalAllowed = includedUnits
-        let used = totalQuantity
-        let remaining = max(0, totalAllowed - used)
-        let percentRemaining = totalAllowed > 0 ? (remaining / totalAllowed) * 100 : 100
-
-        logger.debug("Copilot: Used \(Int(used))/\(Int(totalAllowed)) requests, \(Int(percentRemaining))% remaining")
+        logger.debug("Copilot: Used \(Int(used))/\(Int(monthlyLimit)) this month, \(Int(percentRemaining))% remaining")
 
         // Create quota
         let quota = UsageQuota(
             percentRemaining: percentRemaining,
             quotaType: .session,
             providerId: "copilot",
-            resetText: "Resets monthly"
+            resetText: "\(Int(used))/\(Int(monthlyLimit)) requests"
         )
 
         return UsageSnapshot(
@@ -192,36 +167,29 @@ public struct CopilotUsageProbe: UsageProbe {
 
 // MARK: - API Response Models
 
-private struct BillingUsageResponse: Decodable {
-    let usageItems: [UsageItem]
+/// Response from /users/{username}/settings/billing/premium_request/usage
+private struct PremiumRequestUsageResponse: Decodable {
+    let timePeriod: TimePeriod
+    let user: String
+    let usageItems: [PremiumUsageItem]
 
-    enum CodingKeys: String, CodingKey {
-        case usageItems = "usage_items"
-    }
-
-    init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        self.usageItems = (try? container.decode([UsageItem].self, forKey: .usageItems)) ?? []
+    struct TimePeriod: Decodable {
+        let year: Int
+        let month: Int
     }
 }
 
-private struct UsageItem: Decodable {
-    let date: String?
+/// Individual premium request usage item.
+private struct PremiumUsageItem: Decodable {
     let product: String?
     let sku: String?
-    let quantity: Double?
+    let model: String?
     let unitType: String?
     let pricePerUnit: Double?
+    let grossQuantity: Double?
     let grossAmount: Double?
+    let discountQuantity: Double?
     let discountAmount: Double?
+    let netQuantity: Double?
     let netAmount: Double?
-
-    enum CodingKeys: String, CodingKey {
-        case date, product, sku, quantity
-        case unitType = "unit_type"
-        case pricePerUnit = "price_per_unit"
-        case grossAmount = "gross_amount"
-        case discountAmount = "discount_amount"
-        case netAmount = "net_amount"
-    }
 }

@@ -350,38 +350,30 @@ struct SettingsContentView: View {
         saveError = nil
         saveSuccess = false
 
-        do {
-            try settings.saveCopilotToken(copilotTokenInput)
-            copilotTokenInput = ""
-            saveSuccess = true
+        settings.saveCopilotToken(copilotTokenInput)
+        copilotTokenInput = ""
+        saveSuccess = true
 
-            // Add Copilot provider if enabled and not already present
-            if settings.copilotEnabled {
-                let copilotProvider = CopilotProvider(probe: CopilotUsageProbe())
-                appState.addProvider(copilotProvider)
+        // Add Copilot provider if enabled and not already present
+        if settings.copilotEnabled {
+            let copilotProvider = CopilotProvider(probe: CopilotUsageProbe())
+            appState.addProvider(copilotProvider)
 
-                // Trigger refresh for the new provider
-                Task {
-                    try? await copilotProvider.refresh()
-                }
+            // Trigger refresh for the new provider
+            Task {
+                try? await copilotProvider.refresh()
             }
+        }
 
-            DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
-                saveSuccess = false
-            }
-        } catch {
-            saveError = error.localizedDescription
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+            saveSuccess = false
         }
     }
 
     private func deleteToken() {
-        do {
-            try settings.deleteCopilotToken()
-            saveError = nil
-            appState.removeProvider(id: "copilot")
-        } catch {
-            saveError = error.localizedDescription
-        }
+        settings.deleteCopilotToken()
+        saveError = nil
+        appState.removeProvider(id: "copilot")
     }
 }
 

@@ -1,12 +1,15 @@
 import Foundation
 import Infrastructure
+import Domain
 
 /// Observable settings manager for ClaudeBar preferences.
-/// Tokens are stored securely in macOS Keychain.
+/// Credentials are stored in UserDefaults via CredentialStore.
 @MainActor
 @Observable
 public final class AppSettings {
     public static let shared = AppSettings()
+
+    private let credentialStore: any CredentialStore
 
     // MARK: - Provider Settings
 
@@ -20,37 +23,38 @@ public final class AppSettings {
     /// The GitHub username for Copilot API calls
     public var githubUsername: String {
         didSet {
-            UserDefaults.standard.set(githubUsername, forKey: Keys.githubUsername)
+            credentialStore.save(githubUsername, forKey: CredentialKey.githubUsername)
         }
     }
 
-    // MARK: - Token Management (Keychain)
+    // MARK: - Token Management
 
     /// Whether a GitHub Copilot token is configured
     public var hasCopilotToken: Bool {
-        KeychainService.shared.hasToken(for: KeychainService.Account.githubCopilotToken)
+        credentialStore.exists(forKey: CredentialKey.githubToken)
     }
 
-    /// Saves the GitHub Copilot token to Keychain
-    public func saveCopilotToken(_ token: String) throws {
-        try KeychainService.shared.saveToken(token, for: KeychainService.Account.githubCopilotToken)
+    /// Saves the GitHub Copilot token
+    public func saveCopilotToken(_ token: String) {
+        credentialStore.save(token, forKey: CredentialKey.githubToken)
     }
 
-    /// Retrieves the GitHub Copilot token from Keychain
+    /// Retrieves the GitHub Copilot token
     public func getCopilotToken() -> String? {
-        KeychainService.shared.getToken(for: KeychainService.Account.githubCopilotToken)
+        credentialStore.get(forKey: CredentialKey.githubToken)
     }
 
-    /// Deletes the GitHub Copilot token from Keychain
-    public func deleteCopilotToken() throws {
-        try KeychainService.shared.deleteToken(for: KeychainService.Account.githubCopilotToken)
+    /// Deletes the GitHub Copilot token
+    public func deleteCopilotToken() {
+        credentialStore.delete(forKey: CredentialKey.githubToken)
     }
 
     // MARK: - Initialization
 
-    private init() {
+    private init(credentialStore: any CredentialStore = UserDefaultsCredentialStore.shared) {
+        self.credentialStore = credentialStore
         self.copilotEnabled = UserDefaults.standard.bool(forKey: Keys.copilotEnabled)
-        self.githubUsername = UserDefaults.standard.string(forKey: Keys.githubUsername) ?? ""
+        self.githubUsername = credentialStore.get(forKey: CredentialKey.githubUsername) ?? ""
     }
 }
 
@@ -59,6 +63,5 @@ public final class AppSettings {
 private extension AppSettings {
     enum Keys {
         static let copilotEnabled = "copilotEnabled"
-        static let githubUsername = "githubUsername"
     }
 }
