@@ -288,36 +288,11 @@ struct MenuContentView: View {
                 WrappedStatCard(quota: quota, delay: Double(index) * 0.08)
             }
         }
+        .padding(.top, 4) // Room for hover scale effect
     }
 
     private var loadingState: some View {
-        VStack(spacing: 16) {
-            ZStack {
-                Circle()
-                    .stroke(Color.white.opacity(0.2), lineWidth: 3)
-                    .frame(width: 50, height: 50)
-
-                Circle()
-                    .trim(from: 0, to: 0.3)
-                    .stroke(
-                        WrappedTheme.accentGradient,
-                        style: StrokeStyle(lineWidth: 3, lineCap: .round)
-                    )
-                    .frame(width: 50, height: 50)
-                    .rotationEffect(.degrees(appState.isRefreshing ? 360 : 0))
-                    .animation(
-                        .linear(duration: 1).repeatForever(autoreverses: false),
-                        value: appState.isRefreshing
-                    )
-            }
-
-            Text("Fetching usage data...")
-                .font(WrappedTheme.bodyFont(size: 13))
-                .foregroundStyle(.white.opacity(0.8))
-        }
-        .frame(height: 140)
-        .frame(maxWidth: .infinity)
-        .glassCard()
+        LoadingSpinnerView()
     }
 
     private var emptyState: some View {
@@ -467,7 +442,6 @@ struct WrappedProviderPill: View {
                         .offset(x: -4, y: 2)
                 }
             }
-            .scaleEffect(isSelected ? 1.02 : 1.0)
         }
         .buttonStyle(.plain)
         .onHover { isHovering = $0 }
@@ -492,34 +466,37 @@ struct WrappedStatCard: View {
     @State private var animateProgress = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            // Header with icon and type
-            HStack(spacing: 6) {
-                Image(systemName: iconName)
-                    .font(.system(size: 10, weight: .bold))
-                    .foregroundStyle(quota.status.themeColor)
+        VStack(alignment: .leading, spacing: 6) {
+            // Header row with icon, type, and badge
+            HStack(alignment: .top, spacing: 0) {
+                // Left side: icon and type label
+                HStack(spacing: 5) {
+                    Image(systemName: iconName)
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(quota.status.themeColor)
 
-                Text(quota.quotaType.displayName.uppercased())
-                    .font(WrappedTheme.captionFont(size: 9))
-                    .foregroundStyle(.white.opacity(0.7))
-                    .tracking(0.5)
+                    Text(quota.quotaType.displayName.uppercased())
+                        .font(WrappedTheme.captionFont(size: 8))
+                        .foregroundStyle(.white.opacity(0.7))
+                        .tracking(0.3)
+                }
 
-                Spacer()
+                Spacer(minLength: 4)
 
-                // Status badge
+                // Status badge - fixed size, won't wrap
                 Text(quota.status.badgeText)
                     .badge(quota.status.themeColor)
             }
 
             // Large percentage number
-            HStack(alignment: .firstTextBaseline, spacing: 2) {
+            HStack(alignment: .firstTextBaseline, spacing: 1) {
                 Text("\(Int(quota.percentRemaining))")
-                    .font(WrappedTheme.statFont(size: 36))
+                    .font(WrappedTheme.statFont(size: 32))
                     .foregroundStyle(.white)
                     .contentTransition(.numericText())
 
                 Text("%")
-                    .font(WrappedTheme.titleFont(size: 18))
+                    .font(WrappedTheme.titleFont(size: 16))
                     .foregroundStyle(.white.opacity(0.6))
             }
 
@@ -527,38 +504,38 @@ struct WrappedStatCard: View {
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
                     // Track
-                    RoundedRectangle(cornerRadius: 4)
+                    RoundedRectangle(cornerRadius: 3)
                         .fill(Color.white.opacity(0.15))
 
                     // Fill
-                    RoundedRectangle(cornerRadius: 4)
+                    RoundedRectangle(cornerRadius: 3)
                         .fill(WrappedTheme.progressGradient(for: quota.percentRemaining))
                         .frame(width: animateProgress ? geo.size.width * quota.percentRemaining / 100 : 0)
                         .animation(.spring(response: 0.8, dampingFraction: 0.7).delay(delay + 0.2), value: animateProgress)
                 }
             }
-            .frame(height: 6)
+            .frame(height: 5)
 
             // Reset info
             if let resetText = quota.resetText ?? quota.resetDescription {
-                HStack(spacing: 4) {
+                HStack(spacing: 3) {
                     Image(systemName: "clock.fill")
-                        .font(.system(size: 8))
+                        .font(.system(size: 7))
 
                     Text(resetText)
-                        .font(WrappedTheme.captionFont(size: 9))
+                        .font(WrappedTheme.captionFont(size: 8))
                 }
                 .foregroundStyle(.white.opacity(0.5))
                 .lineLimit(1)
             }
         }
-        .padding(14)
+        .padding(12)
         .background(
             ZStack {
-                RoundedRectangle(cornerRadius: 16)
+                RoundedRectangle(cornerRadius: 14)
                     .fill(WrappedTheme.cardGradient)
 
-                RoundedRectangle(cornerRadius: 16)
+                RoundedRectangle(cornerRadius: 14)
                     .stroke(
                         LinearGradient(
                             colors: [
@@ -572,8 +549,8 @@ struct WrappedStatCard: View {
                     )
             }
         )
-        .scaleEffect(isHovering ? 1.02 : 1.0)
-        .animation(.spring(response: 0.3), value: isHovering)
+        .scaleEffect(isHovering ? 1.015 : 1.0)
+        .animation(.easeOut(duration: 0.15), value: isHovering)
         .onHover { isHovering = $0 }
         .onAppear {
             animateProgress = true
@@ -585,6 +562,45 @@ struct WrappedStatCard: View {
         case .session: return "bolt.fill"
         case .weekly: return "calendar.badge.clock"
         case .modelSpecific: return "cpu.fill"
+        }
+    }
+}
+
+// MARK: - Loading Spinner View
+
+struct LoadingSpinnerView: View {
+    @State private var isSpinning = false
+
+    var body: some View {
+        VStack(spacing: 16) {
+            ZStack {
+                Circle()
+                    .stroke(Color.white.opacity(0.2), lineWidth: 3)
+                    .frame(width: 50, height: 50)
+
+                Circle()
+                    .trim(from: 0, to: 0.3)
+                    .stroke(
+                        WrappedTheme.accentGradient,
+                        style: StrokeStyle(lineWidth: 3, lineCap: .round)
+                    )
+                    .frame(width: 50, height: 50)
+                    .rotationEffect(.degrees(isSpinning ? 360 : 0))
+                    .animation(
+                        .linear(duration: 1).repeatForever(autoreverses: false),
+                        value: isSpinning
+                    )
+            }
+
+            Text("Fetching usage data...")
+                .font(WrappedTheme.bodyFont(size: 13))
+                .foregroundStyle(.white.opacity(0.8))
+        }
+        .frame(height: 140)
+        .frame(maxWidth: .infinity)
+        .glassCard()
+        .onAppear {
+            isSpinning = true
         }
     }
 }
