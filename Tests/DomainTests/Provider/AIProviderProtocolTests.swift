@@ -201,4 +201,164 @@ struct AIProviderRegistryTests {
 
         #expect(unknown == nil)
     }
+
+    // MARK: - Static Accessors
+
+    @Test
+    func `static accessor returns claude provider`() {
+        AIProviderRegistry.shared.register([
+            ClaudeProvider(probe: MockUsageProbe()),
+            CodexProvider(probe: MockUsageProbe()),
+            GeminiProvider(probe: MockUsageProbe())
+        ])
+
+        #expect(AIProviderRegistry.claude?.id == "claude")
+        #expect(AIProviderRegistry.claude?.name == "Claude")
+    }
+
+    @Test
+    func `static accessor returns codex provider`() {
+        AIProviderRegistry.shared.register([
+            ClaudeProvider(probe: MockUsageProbe()),
+            CodexProvider(probe: MockUsageProbe()),
+            GeminiProvider(probe: MockUsageProbe())
+        ])
+
+        #expect(AIProviderRegistry.codex?.id == "codex")
+        #expect(AIProviderRegistry.codex?.name == "Codex")
+    }
+
+    @Test
+    func `static accessor returns gemini provider`() {
+        AIProviderRegistry.shared.register([
+            ClaudeProvider(probe: MockUsageProbe()),
+            CodexProvider(probe: MockUsageProbe()),
+            GeminiProvider(probe: MockUsageProbe())
+        ])
+
+        #expect(AIProviderRegistry.gemini?.id == "gemini")
+        #expect(AIProviderRegistry.gemini?.name == "Gemini")
+    }
+
+    @Test
+    func `static accessors return nil when providers not registered`() {
+        AIProviderRegistry.shared.register([])
+
+        #expect(AIProviderRegistry.claude == nil)
+        #expect(AIProviderRegistry.codex == nil)
+        #expect(AIProviderRegistry.gemini == nil)
+    }
+
+    @Test
+    func `static lookup by id returns correct provider`() {
+        AIProviderRegistry.shared.register([
+            ClaudeProvider(probe: MockUsageProbe()),
+            CodexProvider(probe: MockUsageProbe()),
+            GeminiProvider(probe: MockUsageProbe())
+        ])
+
+        #expect(AIProviderRegistry.provider(for: "claude")?.id == "claude")
+        #expect(AIProviderRegistry.provider(for: "codex")?.id == "codex")
+        #expect(AIProviderRegistry.provider(for: "gemini")?.id == "gemini")
+    }
+}
+
+// MARK: - Provider Identity Tests
+
+@Suite
+struct ProviderIdentityTests {
+
+    @Test
+    func `all providers have unique ids`() {
+        let providers: [any AIProvider] = [
+            ClaudeProvider(probe: MockUsageProbe()),
+            CodexProvider(probe: MockUsageProbe()),
+            GeminiProvider(probe: MockUsageProbe())
+        ]
+
+        let ids = Set(providers.map(\.id))
+        #expect(ids.count == 3)
+    }
+
+    @Test
+    func `all providers have display names`() {
+        let claude = ClaudeProvider(probe: MockUsageProbe())
+        let codex = CodexProvider(probe: MockUsageProbe())
+        let gemini = GeminiProvider(probe: MockUsageProbe())
+
+        #expect(claude.name == "Claude")
+        #expect(codex.name == "Codex")
+        #expect(gemini.name == "Gemini")
+    }
+
+    @Test
+    func `provider name matches its identity`() {
+        // This tests the rich domain model - name is from provider, not hardcoded
+        let claude = ClaudeProvider(probe: MockUsageProbe())
+
+        #expect(claude.id == "claude")
+        #expect(claude.name == "Claude")
+        #expect(claude.cliCommand == "claude")
+    }
+
+    @Test
+    func `codex provider has correct identity`() {
+        let codex = CodexProvider(probe: MockUsageProbe())
+
+        #expect(codex.id == "codex")
+        #expect(codex.name == "Codex")
+        #expect(codex.cliCommand == "codex")
+    }
+
+    @Test
+    func `gemini provider has correct identity`() {
+        let gemini = GeminiProvider(probe: MockUsageProbe())
+
+        #expect(gemini.id == "gemini")
+        #expect(gemini.name == "Gemini")
+        #expect(gemini.cliCommand == "gemini")
+    }
+
+    @Test
+    func `all providers have dashboard urls`() {
+        let claude = ClaudeProvider(probe: MockUsageProbe())
+        let codex = CodexProvider(probe: MockUsageProbe())
+        let gemini = GeminiProvider(probe: MockUsageProbe())
+
+        #expect(claude.dashboardURL != nil)
+        #expect(codex.dashboardURL != nil)
+        #expect(gemini.dashboardURL != nil)
+    }
+
+    @Test
+    func `claude dashboard url points to anthropic`() {
+        let claude = ClaudeProvider(probe: MockUsageProbe())
+
+        #expect(claude.dashboardURL?.host?.contains("anthropic") == true)
+    }
+
+    @Test
+    func `codex dashboard url points to openai`() {
+        let codex = CodexProvider(probe: MockUsageProbe())
+
+        #expect(codex.dashboardURL?.host?.contains("openai") == true)
+    }
+
+    @Test
+    func `gemini dashboard url points to google`() {
+        let gemini = GeminiProvider(probe: MockUsageProbe())
+
+        #expect(gemini.dashboardURL?.host?.contains("google") == true)
+    }
+
+    @Test
+    func `providers are enabled by default`() {
+        let claude = ClaudeProvider(probe: MockUsageProbe())
+        let codex = CodexProvider(probe: MockUsageProbe())
+        let gemini = GeminiProvider(probe: MockUsageProbe())
+
+        #expect(claude.isEnabled == true)
+        #expect(codex.isEnabled == true)
+        #expect(gemini.isEnabled == true)
+    }
 }

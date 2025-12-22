@@ -190,4 +190,202 @@ struct UsageSnapshotTests {
         #expect(lowest?.percentRemaining == 25)
         #expect(lowest?.quotaType == .weekly)
     }
+
+    // MARK: - Provider Lookup (Rich Domain Model)
+
+    @Test
+    func `snapshot can lookup its provider from registry`() {
+        // Given - register providers
+        let claude = ClaudeProvider(probe: MockUsageProbe())
+        AIProviderRegistry.shared.register([claude])
+
+        // When - create snapshot for registered provider
+        let snapshot = UsageSnapshot(providerId: "claude", quotas: [], capturedAt: Date())
+
+        // Then - snapshot can find its provider
+        #expect(snapshot.provider != nil)
+        #expect(snapshot.provider?.id == "claude")
+        #expect(snapshot.provider?.name == "Claude")
+    }
+
+    @Test
+    func `snapshot returns nil for unregistered provider`() {
+        // Given - empty registry
+        AIProviderRegistry.shared.register([])
+
+        // When - create snapshot for unknown provider
+        let snapshot = UsageSnapshot(providerId: "unknown-provider", quotas: [], capturedAt: Date())
+
+        // Then - no provider found
+        #expect(snapshot.provider == nil)
+    }
+
+    @Test
+    func `snapshot provider lookup returns correct provider among multiple`() {
+        // Given - multiple providers registered
+        let claude = ClaudeProvider(probe: MockUsageProbe())
+        let codex = CodexProvider(probe: MockUsageProbe())
+        let gemini = GeminiProvider(probe: MockUsageProbe())
+        AIProviderRegistry.shared.register([claude, codex, gemini])
+
+        // When - create snapshot for codex
+        let snapshot = UsageSnapshot(providerId: "codex", quotas: [], capturedAt: Date())
+
+        // Then - finds correct provider
+        #expect(snapshot.provider?.id == "codex")
+        #expect(snapshot.provider?.name == "Codex")
+    }
+
+    // MARK: - Account Information
+
+    @Test
+    func `snapshot captures account information`() {
+        // Given & When
+        let snapshot = UsageSnapshot(
+            providerId: "claude",
+            quotas: [],
+            capturedAt: Date(),
+            accountEmail: "user@example.com",
+            accountOrganization: "Acme Corp",
+            loginMethod: "Claude Max"
+        )
+
+        // Then
+        #expect(snapshot.accountEmail == "user@example.com")
+        #expect(snapshot.accountOrganization == "Acme Corp")
+        #expect(snapshot.loginMethod == "Claude Max")
+    }
+
+    @Test
+    func `snapshot account info is optional`() {
+        // Given & When
+        let snapshot = UsageSnapshot(providerId: "claude", quotas: [], capturedAt: Date())
+
+        // Then
+        #expect(snapshot.accountEmail == nil)
+        #expect(snapshot.accountOrganization == nil)
+        #expect(snapshot.loginMethod == nil)
+    }
+
+    // MARK: - Model Specific Quotas
+
+    @Test
+    func `snapshot filters model specific quotas`() {
+        // Given
+        let quotas = [
+            UsageQuota(percentRemaining: 80, quotaType: .session, providerId: "claude"),
+            UsageQuota(percentRemaining: 70, quotaType: .weekly, providerId: "claude"),
+            UsageQuota(percentRemaining: 60, quotaType: .modelSpecific("opus"), providerId: "claude"),
+            UsageQuota(percentRemaining: 50, quotaType: .modelSpecific("sonnet"), providerId: "claude"),
+        ]
+        let snapshot = UsageSnapshot(providerId: "claude", quotas: quotas, capturedAt: Date())
+
+        // When
+        let modelQuotas = snapshot.modelSpecificQuotas
+
+        // Then
+        #expect(modelQuotas.count == 2)
+        #expect(modelQuotas.allSatisfy { quota in
+            if case .modelSpecific = quota.quotaType { return true }
+            return false
+        })
+    }
+
+    @Test
+    func `snapshot returns empty array when no model specific quotas`() {
+        // Given
+        let quotas = [
+            UsageQuota(percentRemaining: 80, quotaType: .session, providerId: "claude"),
+            UsageQuota(percentRemaining: 70, quotaType: .weekly, providerId: "claude"),
+        ]
+        let snapshot = UsageSnapshot(providerId: "claude", quotas: quotas, capturedAt: Date())
+
+        // When
+        let modelQuotas = snapshot.modelSpecificQuotas
+
+        // Then
+        #expect(modelQuotas.isEmpty)
+    }
+
+    // MARK: - Empty Snapshot Factory
+
+    @Test
+    func `empty snapshot factory creates snapshot with no quotas`() {
+        // When
+        let snapshot = UsageSnapshot.empty(for: "claude")
+
+        // Then
+        #expect(snapshot.providerId == "claude")
+        #expect(snapshot.quotas.isEmpty)
+        #expect(snapshot.overallStatus == .healthy)
+    }
+
+    // MARK: - Age Description
+
+    @Test
+    func `age description shows just now for recent snapshots`() {
+        // Given - snapshot from 30 seconds ago
+        let snapshot = UsageSnapshot(
+            providerId: "claude",
+            quotas: [],
+            capturedAt: Date().addingTimeInterval(-30)
+        )
+
+        // Then
+        #expect(snapshot.ageDescription == "Just now")
+    }
+
+    @Test
+    func `age description shows minutes for older snapshots`() {
+        // Given - snapshot from 2 minutes ago
+        let snapshot = UsageSnapshot(
+            providerId: "claude",
+            quotas: [],
+            capturedAt: Date().addingTimeInterval(-120)
+        )
+
+        // Then
+        #expect(snapshot.ageDescription == "2m ago")
+    }
+
+    @Test
+    func `age description shows hours for old snapshots`() {
+        // Given - snapshot from 2 hours ago
+        let snapshot = UsageSnapshot(
+            providerId: "claude",
+            quotas: [],
+            capturedAt: Date().addingTimeInterval(-7200)
+        )
+
+        // Then
+        #expect(snapshot.ageDescription == "2h ago")
+    }
+
+    // MARK: - Session and Weekly Quota Accessors
+
+    @Test
+    func `sessionQuota returns session quota when present`() {
+        // Given
+        let quotas = [
+            UsageQuota(percentRemaining: 80, quotaType: .session, providerId: "claude"),
+            UsageQuota(percentRemaining: 70, quotaType: .weekly, providerId: "claude"),
+        ]
+        let snapshot = UsageSnapshot(providerId: "claude", quotas: quotas, capturedAt: Date())
+
+        // Then
+        #expect(snapshot.sessionQuota?.percentRemaining == 80)
+    }
+
+    @Test
+    func `weeklyQuota returns weekly quota when present`() {
+        // Given
+        let quotas = [
+            UsageQuota(percentRemaining: 80, quotaType: .session, providerId: "claude"),
+            UsageQuota(percentRemaining: 70, quotaType: .weekly, providerId: "claude"),
+        ]
+        let snapshot = UsageSnapshot(providerId: "claude", quotas: quotas, capturedAt: Date())
+
+        // Then
+        #expect(snapshot.weeklyQuota?.percentRemaining == 70)
+    }
 }
