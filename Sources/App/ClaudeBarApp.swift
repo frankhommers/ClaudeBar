@@ -26,6 +26,18 @@ final class AppState {
     init(providers: [any AIProvider] = []) {
         self.providers = providers
     }
+
+    /// Adds a provider if not already present
+    func addProvider(_ provider: any AIProvider) {
+        guard !providers.contains(where: { $0.id == provider.id }) else { return }
+        providers.append(provider)
+        AIProviderRegistry.shared.register([provider])
+    }
+
+    /// Removes a provider by ID
+    func removeProvider(id: String) {
+        providers.removeAll { $0.id == id }
+    }
 }
 
 @main
@@ -41,11 +53,16 @@ struct ClaudeBarApp: App {
 
     init() {
         // Create providers with their probes (rich domain models)
-        let providers: [any AIProvider] = [
+        var providers: [any AIProvider] = [
             ClaudeProvider(probe: ClaudeUsageProbe()),
             CodexProvider(probe: CodexUsageProbe()),
             GeminiProvider(probe: GeminiUsageProbe()),
         ]
+
+        // Add Copilot provider if configured
+        if AppSettings.shared.copilotEnabled && AppSettings.shared.hasCopilotToken {
+            providers.append(CopilotProvider(probe: CopilotUsageProbe()))
+        }
 
         // Register providers for global access
         AIProviderRegistry.shared.register(providers)

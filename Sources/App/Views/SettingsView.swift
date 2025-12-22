@@ -1,0 +1,406 @@
+import SwiftUI
+import Domain
+import Infrastructure
+
+/// Inline settings content view that fits within the menu bar popup.
+struct SettingsContentView: View {
+    @Binding var showSettings: Bool
+    let appState: AppState
+    @Environment(\.colorScheme) private var colorScheme
+    @State private var settings = AppSettings.shared
+
+    // Token input state
+    @State private var copilotTokenInput: String = ""
+    @State private var showToken: Bool = false
+    @State private var saveError: String?
+    @State private var saveSuccess: Bool = false
+
+    var body: some View {
+        VStack(spacing: 0) {
+            // Header
+            header
+                .padding(.horizontal, 16)
+                .padding(.top, 16)
+                .padding(.bottom, 16)
+
+            // Scrollable Content
+            ScrollView(.vertical, showsIndicators: false) {
+                VStack(spacing: 12) {
+                    copilotCard
+                }
+                .padding(.horizontal, 16)
+                .padding(.bottom, 16)
+            }
+
+            // Footer
+            footer
+                .padding(.horizontal, 16)
+                .padding(.bottom, 12)
+        }
+    }
+
+    // MARK: - Header
+
+    private var header: some View {
+        HStack {
+            // Back button
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    showSettings = false
+                }
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 10, weight: .bold))
+                    Text("Back")
+                        .font(AppTheme.bodyFont(size: 11))
+                }
+                .foregroundStyle(AppTheme.textPrimary(for: colorScheme))
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(
+                    Capsule()
+                        .fill(AppTheme.glassBackground(for: colorScheme))
+                        .overlay(
+                            Capsule()
+                                .stroke(AppTheme.glassBorder(for: colorScheme), lineWidth: 1)
+                        )
+                )
+            }
+            .buttonStyle(.plain)
+
+            Spacer()
+
+            Text("Settings")
+                .font(AppTheme.titleFont(size: 16))
+                .foregroundStyle(AppTheme.textPrimary(for: colorScheme))
+
+            Spacer()
+
+            // Invisible placeholder to balance the header
+            Color.clear
+                .frame(width: 60, height: 1)
+        }
+    }
+
+    // MARK: - Copilot Card
+
+    private var copilotCard: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            // Header row with icon, title, toggle
+            copilotHeader
+
+            // Expandable content
+            if settings.copilotEnabled {
+                Divider()
+                    .background(AppTheme.glassBorder(for: colorScheme))
+                    .padding(.vertical, 12)
+
+                copilotForm
+            }
+        }
+        .padding(14)
+        .background(
+            RoundedRectangle(cornerRadius: 14)
+                .fill(AppTheme.cardGradient(for: colorScheme))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14)
+                        .stroke(
+                            LinearGradient(
+                                colors: [
+                                    colorScheme == .dark ? Color.white.opacity(0.25) : AppTheme.purpleVibrant(for: colorScheme).opacity(0.18),
+                                    colorScheme == .dark ? Color.white.opacity(0.08) : AppTheme.pinkHot(for: colorScheme).opacity(0.08)
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ),
+                            lineWidth: 1
+                        )
+                )
+        )
+    }
+
+    private var copilotHeader: some View {
+        HStack(spacing: 10) {
+            // Provider icon
+            ZStack {
+                Circle()
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                Color(red: 0.38, green: 0.55, blue: 0.93),
+                                Color(red: 0.55, green: 0.40, blue: 0.90)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .frame(width: 32, height: 32)
+
+                Image(systemName: "chevron.left.forwardslash.chevron.right")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(.white)
+            }
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("GitHub Copilot")
+                    .font(AppTheme.titleFont(size: 14))
+                    .foregroundStyle(AppTheme.textPrimary(for: colorScheme))
+
+                Text("Premium usage tracking")
+                    .font(AppTheme.captionFont(size: 10))
+                    .foregroundStyle(AppTheme.textTertiary(for: colorScheme))
+            }
+
+            Spacer()
+
+            Toggle("", isOn: $settings.copilotEnabled)
+                .toggleStyle(.switch)
+                .tint(AppTheme.purpleVibrant(for: colorScheme))
+                .scaleEffect(0.8)
+                .labelsHidden()
+        }
+    }
+
+    private var copilotForm: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            // GitHub Username
+            VStack(alignment: .leading, spacing: 6) {
+                Text("GITHUB USERNAME")
+                    .font(AppTheme.captionFont(size: 9))
+                    .foregroundStyle(AppTheme.textSecondary(for: colorScheme))
+                    .tracking(0.5)
+
+                TextField("", text: $settings.githubUsername, prompt: Text("username").foregroundStyle(AppTheme.textTertiary(for: colorScheme)))
+                    .font(AppTheme.bodyFont(size: 12))
+                    .foregroundStyle(AppTheme.textPrimary(for: colorScheme))
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 8)
+                    .background(
+                        RoundedRectangle(cornerRadius: 8)
+                            .fill(colorScheme == .dark ? Color.white.opacity(0.1) : Color.white.opacity(0.8))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 8)
+                                    .stroke(AppTheme.glassBorder(for: colorScheme), lineWidth: 1)
+                            )
+                    )
+            }
+
+            // Personal Access Token
+            VStack(alignment: .leading, spacing: 6) {
+                HStack {
+                    Text("PERSONAL ACCESS TOKEN")
+                        .font(AppTheme.captionFont(size: 9))
+                        .foregroundStyle(AppTheme.textSecondary(for: colorScheme))
+                        .tracking(0.5)
+
+                    Spacer()
+
+                    if settings.hasCopilotToken {
+                        HStack(spacing: 3) {
+                            Image(systemName: "checkmark.circle.fill")
+                                .font(.system(size: 9))
+                            Text("Configured")
+                                .font(AppTheme.captionFont(size: 9))
+                        }
+                        .foregroundStyle(AppTheme.statusHealthy(for: colorScheme))
+                    }
+                }
+
+                HStack(spacing: 6) {
+                    // Token input field
+                    Group {
+                        if showToken {
+                            TextField("", text: $copilotTokenInput, prompt: Text("ghp_xxxx...").foregroundStyle(AppTheme.textTertiary(for: colorScheme)))
+                        } else {
+                            SecureField("", text: $copilotTokenInput, prompt: Text("ghp_xxxx...").foregroundStyle(AppTheme.textTertiary(for: colorScheme)))
+                        }
+                    }
+                    .font(AppTheme.bodyFont(size: 12))
+                    .foregroundStyle(AppTheme.textPrimary(for: colorScheme))
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 8)
+                    .background(
+                        RoundedRectangle(cornerRadius: 8)
+                            .fill(colorScheme == .dark ? Color.white.opacity(0.1) : Color.white.opacity(0.8))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 8)
+                                    .stroke(AppTheme.glassBorder(for: colorScheme), lineWidth: 1)
+                            )
+                    )
+
+                    // Eye button
+                    Button {
+                        showToken.toggle()
+                    } label: {
+                        Image(systemName: showToken ? "eye.slash.fill" : "eye.fill")
+                            .font(.system(size: 11))
+                            .foregroundStyle(AppTheme.textSecondary(for: colorScheme))
+                            .frame(width: 28, height: 28)
+                            .background(
+                                Circle()
+                                    .fill(AppTheme.glassBackground(for: colorScheme))
+                            )
+                    }
+                    .buttonStyle(.plain)
+
+                    // Save button
+                    Button {
+                        saveToken()
+                    } label: {
+                        Text("Save")
+                            .font(AppTheme.bodyFont(size: 10))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 7)
+                            .background(
+                                Capsule()
+                                    .fill(AppTheme.accentGradient(for: colorScheme))
+                            )
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(copilotTokenInput.isEmpty)
+                    .opacity(copilotTokenInput.isEmpty ? 0.5 : 1)
+                }
+
+                // Status messages
+                if let error = saveError {
+                    HStack(spacing: 4) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.system(size: 9))
+                        Text(error)
+                            .font(AppTheme.captionFont(size: 9))
+                    }
+                    .foregroundStyle(AppTheme.statusCritical(for: colorScheme))
+                } else if saveSuccess {
+                    HStack(spacing: 4) {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 9))
+                        Text("Token saved!")
+                            .font(AppTheme.captionFont(size: 9))
+                    }
+                    .foregroundStyle(AppTheme.statusHealthy(for: colorScheme))
+                }
+            }
+
+            // Help text and link
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Create a fine-grained PAT with 'Plan: read' permission")
+                    .font(AppTheme.captionFont(size: 9))
+                    .foregroundStyle(AppTheme.textTertiary(for: colorScheme))
+
+                Link(destination: URL(string: "https://github.com/settings/tokens?type=beta")!) {
+                    HStack(spacing: 3) {
+                        Text("Create token on GitHub")
+                            .font(AppTheme.captionFont(size: 9))
+                        Image(systemName: "arrow.up.right")
+                            .font(.system(size: 7, weight: .bold))
+                    }
+                    .foregroundStyle(AppTheme.purpleVibrant(for: colorScheme))
+                }
+            }
+
+            // Delete token
+            if settings.hasCopilotToken {
+                Button {
+                    deleteToken()
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "trash.fill")
+                            .font(.system(size: 9))
+                        Text("Remove Token")
+                            .font(AppTheme.captionFont(size: 9))
+                    }
+                    .foregroundStyle(AppTheme.statusCritical(for: colorScheme))
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    // MARK: - Footer
+
+    private var footer: some View {
+        HStack {
+            Spacer()
+
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    showSettings = false
+                }
+            } label: {
+                Text("Done")
+                    .font(AppTheme.bodyFont(size: 11))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 7)
+                    .background(
+                        Capsule()
+                            .fill(AppTheme.accentGradient(for: colorScheme))
+                            .shadow(color: AppTheme.pinkHot(for: colorScheme).opacity(0.25), radius: 6, y: 2)
+                    )
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    // MARK: - Actions
+
+    private func saveToken() {
+        saveError = nil
+        saveSuccess = false
+
+        do {
+            try settings.saveCopilotToken(copilotTokenInput)
+            copilotTokenInput = ""
+            saveSuccess = true
+
+            // Add Copilot provider if enabled and not already present
+            if settings.copilotEnabled {
+                let copilotProvider = CopilotProvider(probe: CopilotUsageProbe())
+                appState.addProvider(copilotProvider)
+
+                // Trigger refresh for the new provider
+                Task {
+                    try? await copilotProvider.refresh()
+                }
+            }
+
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                saveSuccess = false
+            }
+        } catch {
+            saveError = error.localizedDescription
+        }
+    }
+
+    private func deleteToken() {
+        do {
+            try settings.deleteCopilotToken()
+            saveError = nil
+            appState.removeProvider(id: "copilot")
+        } catch {
+            saveError = error.localizedDescription
+        }
+    }
+}
+
+// MARK: - Preview
+
+#Preview("Settings - Dark") {
+    ZStack {
+        AppTheme.backgroundGradient(for: .dark)
+        SettingsContentView(showSettings: .constant(true), appState: AppState())
+    }
+    .frame(width: 380, height: 420)
+    .preferredColorScheme(.dark)
+}
+
+#Preview("Settings - Light") {
+    ZStack {
+        AppTheme.backgroundGradient(for: .light)
+        SettingsContentView(showSettings: .constant(true), appState: AppState())
+    }
+    .frame(width: 380, height: 420)
+    .preferredColorScheme(.light)
+}

@@ -11,6 +11,7 @@ struct MenuContentView: View {
     @State private var selectedProviderId: String = "claude"
     @State private var isHoveringRefresh = false
     @State private var animateIn = false
+    @State private var showSettings = false
 
     /// The currently selected provider
     private var selectedProvider: (any AIProvider)? {
@@ -26,32 +27,38 @@ struct MenuContentView: View {
             // Subtle animated orbs in background
             backgroundOrbs
 
-            VStack(spacing: 0) {
-                // Header with branding
-                headerView
-                    .padding(.horizontal, 16)
-                    .padding(.top, 16)
-                    .padding(.bottom, 12)
+            if showSettings {
+                // Settings View
+                SettingsContentView(showSettings: $showSettings, appState: appState)
+            } else {
+                // Main Content
+                VStack(spacing: 0) {
+                    // Header with branding
+                    headerView
+                        .padding(.horizontal, 16)
+                        .padding(.top, 16)
+                        .padding(.bottom, 12)
 
-                // Provider Pills
-                providerPills
-                    .padding(.horizontal, 16)
-                    .padding(.bottom, 16)
+                    // Provider Pills
+                    providerPills
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 16)
 
-                // Main Content Area
-                ScrollView(.vertical, showsIndicators: false) {
-                    VStack(spacing: 12) {
-                        metricsContent
+                    // Main Content Area
+                    ScrollView(.vertical, showsIndicators: false) {
+                        VStack(spacing: 12) {
+                            metricsContent
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 16)
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.bottom, 16)
-                }
-                .frame(maxHeight: 280)
+                    .frame(maxHeight: 280)
 
-                // Bottom Action Bar
-                actionBar
-                    .padding(.horizontal, 16)
-                    .padding(.bottom, 12)
+                    // Bottom Action Bar
+                    actionBar
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 12)
+                }
             }
         }
         .frame(width: 380)
@@ -183,16 +190,18 @@ struct MenuContentView: View {
     // MARK: - Provider Pills
 
     private var providerPills: some View {
-        HStack(spacing: 8) {
-            ForEach(appState.providers, id: \.id) { provider in
-                ProviderPill(
-                    providerId: provider.id,
-                    providerName: provider.name,
-                    isSelected: provider.id == selectedProviderId,
-                    hasData: provider.snapshot != nil
-                ) {
-                    withAnimation(.spring(response: 0.35, dampingFraction: 0.7)) {
-                        selectedProviderId = provider.id
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 6) {
+                ForEach(appState.providers, id: \.id) { provider in
+                    ProviderPill(
+                        providerId: provider.id,
+                        providerName: provider.name,
+                        isSelected: provider.id == selectedProviderId,
+                        hasData: provider.snapshot != nil
+                    ) {
+                        withAnimation(.spring(response: 0.35, dampingFraction: 0.7)) {
+                            selectedProviderId = provider.id
+                        }
                     }
                 }
             }
@@ -335,6 +344,26 @@ struct MenuContentView: View {
 
             Spacer()
 
+            // Settings Button
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    showSettings = true
+                }
+            } label: {
+                ZStack {
+                    Circle()
+                        .fill(AppTheme.glassBackground(for: colorScheme))
+                        .frame(width: 32, height: 32)
+
+                    Image(systemName: "gearshape.fill")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(AppTheme.textSecondary(for: colorScheme))
+                }
+            }
+            .buttonStyle(.plain)
+            .help("Settings")
+            .keyboardShortcut(",")
+
             // Quit Button
             Button {
                 NSApplication.shared.terminate(nil)
@@ -396,22 +425,24 @@ struct ProviderPill: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 6) {
+            HStack(spacing: 4) {
                 Image(systemName: providerIcon)
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.system(size: 10, weight: .semibold))
 
                 Text(providerName)
-                    .font(AppTheme.bodyFont(size: 12))
+                    .font(AppTheme.bodyFont(size: 11))
+                    .lineLimit(1)
+                    .fixedSize()
             }
             .foregroundStyle(pillForegroundColor)
-            .padding(.horizontal, 14)
-            .padding(.vertical, 8)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
             .background(
                 ZStack {
                     if isSelected {
                         Capsule()
                             .fill(AppTheme.providerGradient(for: providerId, scheme: colorScheme))
-                            .shadow(color: AppTheme.providerColor(for: providerId, scheme: colorScheme).opacity(colorScheme == .dark ? 0.4 : 0.25), radius: 8, y: 2)
+                            .shadow(color: AppTheme.providerColor(for: providerId, scheme: colorScheme).opacity(colorScheme == .dark ? 0.4 : 0.25), radius: 6, y: 2)
                     } else {
                         Capsule()
                             .fill(pillBackgroundColor)
