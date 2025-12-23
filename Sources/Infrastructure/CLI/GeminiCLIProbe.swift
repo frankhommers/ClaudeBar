@@ -12,29 +12,29 @@ internal struct GeminiCLIProbe {
     }
 
     func probe() async throws -> UsageSnapshot {
-        guard PTYCommandRunner.which("gemini") != nil else {
+        guard BinaryLocator.which("gemini") != nil else {
             throw ProbeError.cliNotFound("gemini")
         }
 
         logger.info("Starting Gemini CLI fallback...")
 
-        let runner = PTYCommandRunner()
-        let options = PTYCommandRunner.Options(
+        let runner = InteractiveRunner()
+        let options = InteractiveRunner.Options(
             timeout: timeout,
-            extraArgs: []
+            arguments: []
         )
 
-        let result: PTYCommandRunner.Result
+        let result: InteractiveRunner.Result
         do {
-            result = try runner.run(binary: "gemini", send: "/stats\n", options: options)
-        } catch let error as PTYCommandRunner.RunError {
+            result = try runner.run(binary: "gemini", input: "/stats\n", options: options)
+        } catch let error as InteractiveRunner.RunError {
             logger.error("Gemini CLI failed: \(error.localizedDescription)")
             throw mapRunError(error)
         }
 
-        logger.debug("Gemini CLI raw output:\n\(result.text)")
+        logger.debug("Gemini CLI raw output:\n\(result.output)")
 
-        let snapshot = try Self.parse(result.text)
+        let snapshot = try Self.parse(result.output)
         logger.info("Gemini CLI probe success: \(snapshot.quotas.count) quotas found")
         return snapshot
     }
@@ -111,7 +111,7 @@ internal struct GeminiCLIProbe {
         return quotas
     }
 
-    private func mapRunError(_ error: PTYCommandRunner.RunError) -> ProbeError {
+    private func mapRunError(_ error: InteractiveRunner.RunError) -> ProbeError {
         switch error {
         case .binaryNotFound(let bin):
             .cliNotFound(bin)

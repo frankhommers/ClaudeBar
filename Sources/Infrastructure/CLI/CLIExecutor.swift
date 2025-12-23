@@ -30,14 +30,14 @@ public protocol CLIExecutor: Sendable {
     ) throws -> CLIResult
 }
 
-// MARK: - Default Implementation using PTYCommandRunner
+// MARK: - Default Implementation
 
-/// Default CLIExecutor that uses PTYCommandRunner for real system interaction.
+/// Default CLIExecutor that uses BinaryLocator and InteractiveRunner.
 public struct DefaultCLIExecutor: CLIExecutor {
     public init() {}
 
     public func locate(_ binary: String) -> String? {
-        PTYCommandRunner.which(binary)
+        BinaryLocator.which(binary)
     }
 
     public func execute(
@@ -48,15 +48,15 @@ public struct DefaultCLIExecutor: CLIExecutor {
         workingDirectory: URL?,
         sendOnSubstrings: [String: String]
     ) throws -> CLIResult {
-        let runner = PTYCommandRunner()
-        let options = PTYCommandRunner.Options(
+        let runner = InteractiveRunner()
+        let options = InteractiveRunner.Options(
             timeout: timeout,
             workingDirectory: workingDirectory,
-            extraArgs: args,
-            sendOnSubstrings: sendOnSubstrings
+            arguments: args,
+            autoResponses: sendOnSubstrings
         )
 
-        let result = try runner.run(binary: binary, send: input ?? "", options: options)
-        return CLIResult(output: result.text, exitCode: result.exitCode)
+        let result = try runner.run(binary: binary, input: input ?? "", options: options)
+        return CLIResult(output: result.output, exitCode: result.exitCode)
     }
 }
