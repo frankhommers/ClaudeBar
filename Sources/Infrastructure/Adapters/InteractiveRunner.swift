@@ -1,0 +1,273 @@
+import Darwin
+import Foundation
+
+/// Runs CLI commands in an interactive terminal session.
+///
+/// Many CLI tools (like Claude, Codex, Gemini) detect when they're not running in a
+/// real terminal and change their behavior. This runner simulates a terminal session
+/// so these tools produce their normal, parseable output.
+///
+/// Usage:
+/// ```swift
+/// let runner = InteractiveRunner()
+/// let result = try runner.run(binary: "claude", input: "/usage")
+/// print(result.output)
+/// ```
+public struct InteractiveRunner: Sendable {
+
+    /// The result of running a command.
+    public struct Result: Sendable {
+        /// The captured output from the command.
+        public let output: String
+        /// The command's exit code (0 typically means success).
+        public let exitCode: Int32
+    }
+
+    /// Configuration for running a command.
+    public struct Options: Sendable {
+        /// Maximum time to wait for the command to complete.
+        public var timeout: TimeInterval
+        /// Directory to run the command in (uses current directory if nil).
+        public var workingDirectory: URL?
+        /// Arguments to pass to the command.
+        public var arguments: [String]
+        /// Automatic responses to prompts. Maps prompt text to the response to send.
+        /// Example: `["Continue? [y/n]": "y\r"]` will auto-respond "y" when prompted.
+        public var autoResponses: [String: String]
+
+        public init(
+            timeout: TimeInterval = 20.0,
+            workingDirectory: URL? = nil,
+            arguments: [String] = [],
+            autoResponses: [String: String] = [:]
+        ) {
+            self.timeout = timeout
+            self.workingDirectory = workingDirectory
+            self.arguments = arguments
+            self.autoResponses = autoResponses
+        }
+    }
+
+    /// Errors that can occur when running a command.
+    public enum RunError: Error, LocalizedError, Sendable {
+        /// The CLI tool was not found on the system.
+        case binaryNotFound(String)
+        /// The command failed to start.
+        case launchFailed(String)
+        /// The command did not complete within the timeout.
+        case timedOut
+
+        public var errorDescription: String? {
+            switch self {
+            case let .binaryNotFound(tool):
+                "CLI '\(tool)' not found. Please install it and ensure it's on PATH."
+            case let .launchFailed(reason):
+                "Failed to start command: \(reason)"
+            case .timedOut:
+                "Command did not complete within the timeout."
+            }
+        }
+    }
+
+    // Terminal size for the simulated session
+    private static let terminalRows: UInt16 = 50
+    private static let terminalCols: UInt16 = 160
+
+    public init() {}
+
+    /// Runs a command and captures its output.
+    ///
+    /// - Parameters:
+    ///   - binary: The CLI tool to run (e.g., "claude", "codex")
+    ///   - input: Text to send to the command (e.g., "/usage")
+    ///   - options: Configuration for timeout, arguments, and auto-responses
+    /// - Returns: The captured output and exit code
+    /// - Throws: `RunError` if the tool is not found, fails to start, or times out
+    public func run(
+        binary: String,
+        input: String,
+        options: Options = Options()
+    ) throws -> Result {
+        let executablePath = try findExecutable(binary)
+        let (primaryFD, secondaryFD) = try openTerminal()
+
+        _ = fcntl(primaryFD, F_SETFL, O_NONBLOCK)
+
+        let primaryHandle = FileHandle(fileDescriptor: primaryFD, closeOnDealloc: true)
+        let secondaryHandle = FileHandle(fileDescriptor: secondaryFD, closeOnDealloc: true)
+
+        let process = createProcess(
+            executablePath: executablePath,
+            options: options,
+            terminalHandle: secondaryHandle
+        )
+
+        var cleanedUp = false
+        var didLaunch = false
+
+        func cleanup() {
+            guard !cleanedUp else { return }
+            cleanedUp = true
+
+            try? primaryHandle.close()
+            try? secondaryHandle.close()
+
+            if didLaunch, process.isRunning {
+                process.terminate()
+                let waitDeadline = Date().addingTimeInterval(2.0)
+                while process.isRunning, Date() < waitDeadline {
+                    usleep(100_000)
+                }
+                if process.isRunning {
+                    kill(process.processIdentifier, SIGKILL)
+                }
+                process.waitUntilExit()
+            }
+        }
+
+        defer { cleanup() }
+
+        try process.run()
+        didLaunch = true
+
+        // Allow process to initialize
+        usleep(400_000)
+
+        // Send the input command
+        try sendInput(input, to: primaryHandle)
+
+        // Read output, handling any prompts automatically
+        let buffer = try captureOutput(
+            from: primaryFD,
+            handle: primaryHandle,
+            process: process,
+            options: options
+        )
+
+        guard let text = String(data: buffer, encoding: .utf8), !text.isEmpty else {
+            throw RunError.timedOut
+        }
+
+        let exitCode: Int32 = process.isRunning ? -1 : process.terminationStatus
+        return Result(output: text, exitCode: exitCode)
+    }
+
+    // MARK: - Private Helpers
+
+    /// Finds the full path to a CLI tool.
+    private func findExecutable(_ binary: String) throws -> String {
+        if FileManager.default.isExecutableFile(atPath: binary) {
+            return binary
+        }
+        if let found = BinaryLocator.which(binary) {
+            return found
+        }
+        throw RunError.binaryNotFound(binary)
+    }
+
+    /// Opens a pseudo-terminal for the interactive session.
+    private func openTerminal() throws -> (primary: Int32, secondary: Int32) {
+        var primaryFD: Int32 = -1
+        var secondaryFD: Int32 = -1
+        var terminalSize = winsize(
+            ws_row: Self.terminalRows,
+            ws_col: Self.terminalCols,
+            ws_xpixel: 0,
+            ws_ypixel: 0
+        )
+        guard openpty(&primaryFD, &secondaryFD, nil, nil, &terminalSize) == 0 else {
+            throw RunError.launchFailed("Could not create terminal session")
+        }
+        return (primaryFD, secondaryFD)
+    }
+
+    /// Creates and configures the process to run.
+    private func createProcess(
+        executablePath: String,
+        options: Options,
+        terminalHandle: FileHandle
+    ) -> Process {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: executablePath)
+        process.arguments = options.arguments
+        process.standardInput = terminalHandle
+        process.standardOutput = terminalHandle
+        process.standardError = terminalHandle
+        process.environment = Self.terminalEnvironment()
+
+        if let workingDirectory = options.workingDirectory {
+            process.currentDirectoryURL = workingDirectory
+        }
+
+        return process
+    }
+
+    /// Sends input text to the running command.
+    private func sendInput(_ input: String, to handle: FileHandle) throws {
+        let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        guard let data = (trimmed + "\r").data(using: .utf8) else { return }
+        try handle.write(contentsOf: data)
+    }
+
+    /// Captures output from the command, automatically responding to known prompts.
+    private func captureOutput(
+        from fd: Int32,
+        handle: FileHandle,
+        process: Process,
+        options: Options
+    ) throws -> Data {
+        let deadline = Date().addingTimeInterval(options.timeout)
+        var buffer = Data()
+
+        let promptResponses = options.autoResponses.map {
+            (prompt: Data($0.key.utf8), response: Data($0.value.utf8))
+        }
+        var respondedPrompts = Set<Data>()
+
+        while Date() < deadline {
+            readAvailableData(from: fd, into: &buffer)
+
+            // Auto-respond to any recognized prompts
+            for item in promptResponses where !respondedPrompts.contains(item.prompt) {
+                if buffer.range(of: item.prompt) != nil {
+                    try? handle.write(contentsOf: item.response)
+                    respondedPrompts.insert(item.prompt)
+                }
+            }
+
+            if !process.isRunning { break }
+            usleep(60000)
+        }
+
+        // Capture any remaining output
+        readAvailableData(from: fd, into: &buffer)
+        return buffer
+    }
+
+    /// Reads all currently available data from a file descriptor.
+    private func readAvailableData(from fd: Int32, into buffer: inout Data) {
+        var chunk = [UInt8](repeating: 0, count: 8192)
+        while true {
+            let bytesRead = Darwin.read(fd, &chunk, chunk.count)
+            if bytesRead > 0 {
+                buffer.append(contentsOf: chunk.prefix(bytesRead))
+            } else {
+                break
+            }
+        }
+    }
+
+    /// Environment variables for the terminal session.
+    /// Ensures CLI tools behave as they would in a normal terminal.
+    private static func terminalEnvironment() -> [String: String] {
+        var env = ProcessInfo.processInfo.environment
+        env["PATH"] = BinaryLocator.searchPaths()
+        env["HOME"] = env["HOME"] ?? NSHomeDirectory()
+        env["TERM"] = env["TERM"] ?? "xterm-256color"
+        env["COLORTERM"] = env["COLORTERM"] ?? "truecolor"
+        env["LANG"] = env["LANG"] ?? "en_US.UTF-8"
+        env["CI"] = env["CI"] ?? "0"
+        return env
+    }
+}
