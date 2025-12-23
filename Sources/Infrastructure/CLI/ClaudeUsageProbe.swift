@@ -37,7 +37,9 @@ public final class ClaudeUsageProbe: UsageProbe, @unchecked Sendable {
                 timeout: timeout,
                 workingDirectory: probeWorkingDirectory(),
                 sendOnSubstrings: [
-                    "Do you trust the files in this folder?": "y\r",
+                    "Do you trust the files in this folder?": "\r",  // Menu with Enter to confirm
+                    "Yes, proceed": "\r",  // Folder trust menu option
+                    "Enter to confirm": "\r",  // Generic confirmation prompt
                     "Ready to code here?": "\r",
                     "Press Enter to continue": "\r",
                 ]
