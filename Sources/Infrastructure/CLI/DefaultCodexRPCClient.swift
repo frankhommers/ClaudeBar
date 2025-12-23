@@ -112,7 +112,7 @@ public final class DefaultCodexRPCClient: CodexRPCClient, @unchecked Sendable {
             input: "/status\n",
             timeout: 20.0,
             workingDirectory: nil,
-            sendOnSubstrings: [:]
+            autoResponses: [:]
         )
 
         logger.debug("Codex TTY raw output:\n\(result.output)")

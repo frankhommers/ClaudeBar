@@ -116,7 +116,7 @@ struct DefaultCodexRPCClientTests {
         {"id":2,"result":{"rateLimits":{"planType":"pro"}}}
         """)
         // TTY fallback will also fail
-        given(mockExecutor).execute(binary: .any, args: .any, input: .any, timeout: .any, workingDirectory: .any, sendOnSubstrings: .any).willThrow(ProbeError.executionFailed("TTY not available"))
+        given(mockExecutor).execute(binary: .any, args: .any, input: .any, timeout: .any, workingDirectory: .any, autoResponses: .any).willThrow(ProbeError.executionFailed("TTY not available"))
 
         let client = DefaultCodexRPCClient(transport: mockTransport, cliExecutor: mockExecutor)
 
@@ -135,7 +135,7 @@ struct DefaultCodexRPCClientTests {
         {"id":2,"error":{"message":"Authentication required"}}
         """)
         // TTY fallback will also fail
-        given(mockExecutor).execute(binary: .any, args: .any, input: .any, timeout: .any, workingDirectory: .any, sendOnSubstrings: .any).willThrow(ProbeError.executionFailed("TTY not available"))
+        given(mockExecutor).execute(binary: .any, args: .any, input: .any, timeout: .any, workingDirectory: .any, autoResponses: .any).willThrow(ProbeError.executionFailed("TTY not available"))
 
         let client = DefaultCodexRPCClient(transport: mockTransport, cliExecutor: mockExecutor)
 
@@ -154,7 +154,7 @@ struct DefaultCodexRPCClientTests {
         {"id":2}
         """)
         // TTY fallback will also fail
-        given(mockExecutor).execute(binary: .any, args: .any, input: .any, timeout: .any, workingDirectory: .any, sendOnSubstrings: .any).willThrow(ProbeError.executionFailed("TTY not available"))
+        given(mockExecutor).execute(binary: .any, args: .any, input: .any, timeout: .any, workingDirectory: .any, autoResponses: .any).willThrow(ProbeError.executionFailed("TTY not available"))
 
         let client = DefaultCodexRPCClient(transport: mockTransport, cliExecutor: mockExecutor)
 

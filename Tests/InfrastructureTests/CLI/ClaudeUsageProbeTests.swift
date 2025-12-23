@@ -147,7 +147,7 @@ struct ClaudeUsageProbeTests {
             input: .any,
             timeout: .any,
             workingDirectory: .any,
-            sendOnSubstrings: .any
+            autoResponses: .any
         ).willReturn(CLIResult(output: usageOutput, exitCode: 0))
 
         let probe = ClaudeUsageProbe(cliExecutor: mockExecutor)
@@ -187,7 +187,7 @@ struct ClaudeUsageProbeTests {
             input: .any,
             timeout: .any,
             workingDirectory: .any,
-            sendOnSubstrings: .any
+            autoResponses: .any
         ).willReturn(CLIResult(output: usageOutput, exitCode: 0))
 
         let probe = ClaudeUsageProbe(cliExecutor: mockExecutor)
