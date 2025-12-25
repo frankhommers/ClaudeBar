@@ -13,34 +13,8 @@ PUB_DATE=$(date -R)
 
 mkdir -p docs
 
-# Try to fetch existing appcast from GitHub Pages
-APPCAST_URL="https://tddworks.github.io/ClaudeBar/appcast.xml"
-EXISTING_ITEMS=""
-if curl -sL --fail "$APPCAST_URL" -o /tmp/appcast_existing.xml 2>/dev/null; then
-    echo "Fetched existing appcast.xml"
-
-    # Remove any existing items with the same version (to avoid duplicates)
-    EXISTING_ITEMS=$(awk -v ver="$VERSION" '
-        /<item>/,/<\/item>/ {
-            if (/<item>/) { item=""; in_item=1 }
-            item = item $0 "\n"
-            if (/<\/item>/) {
-                in_item=0
-                if (item !~ "<title>" ver "</title>" && item !~ "<sparkle:shortVersionString>" ver "</sparkle:shortVersionString>") {
-                    printf "%s", item
-                }
-            }
-            next
-        }
-        { if (!in_item) next }
-    ' /tmp/appcast_existing.xml)
-
-    rm -f /tmp/appcast_existing.xml
-else
-    echo "No existing appcast found, creating new one"
-fi
-
-# Create new appcast
+# Create fresh appcast with only the new version
+# (Old entries with inconsistent build numbers cause issues)
 cat > docs/appcast.xml << EOF
 <?xml version="1.0" encoding="utf-8" standalone="yes"?>
 <rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0">
@@ -58,7 +32,6 @@ cat > docs/appcast.xml << EOF
 ]]></description>
             <enclosure url="${DOWNLOAD_URL}" length="${FILE_SIZE}" type="application/octet-stream" sparkle:edSignature="${ED_SIGNATURE}"/>
         </item>
-${EXISTING_ITEMS}
     </channel>
 </rss>
 EOF
