@@ -451,10 +451,8 @@ struct MenuContentView: View {
                     // Update available indicator
                     #if ENABLE_SPARKLE
                     if sparkleUpdater?.isUpdateAvailable == true {
-                        Circle()
-                            .fill(AppTheme.statusCritical(for: colorScheme))
-                            .frame(width: 8, height: 8)
-                            .offset(x: 10, y: -10)
+                        UpdateBadge(isChristmas: isChristmas)
+                            .offset(x: 14, y: -14)
                     }
                     #endif
                 }
@@ -920,6 +918,59 @@ struct PulsingStatusDot: View {
     private func stopPulsing() {
         withAnimation(.easeOut(duration: 0.3)) {
             pulsePhase = 0
+        }
+    }
+}
+
+// MARK: - Update Badge
+
+/// A polished badge indicating an update is available
+struct UpdateBadge: View {
+    var isChristmas: Bool = false
+
+    @Environment(\.colorScheme) private var colorScheme
+
+    private var badgeGradient: LinearGradient {
+        if isChristmas {
+            return LinearGradient(
+                colors: [AppTheme.christmasGold, AppTheme.christmasRed],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        }
+        return LinearGradient(
+            colors: [
+                AppTheme.coralAccent(for: colorScheme),
+                AppTheme.pinkHot(for: colorScheme)
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+
+    var body: some View {
+        ZStack {
+            // Outer glow
+            Circle()
+                .fill(badgeGradient)
+                .frame(width: 18, height: 18)
+                .blur(radius: 3)
+                .opacity(0.5)
+
+            // Main badge
+            Circle()
+                .fill(badgeGradient)
+                .frame(width: 14, height: 14)
+                .overlay(
+                    Circle()
+                        .stroke(Color.white.opacity(0.4), lineWidth: 1)
+                )
+                .shadow(color: .black.opacity(0.2), radius: 2, y: 1)
+
+            // Arrow up icon
+            Image(systemName: "arrow.up")
+                .font(.system(size: 7, weight: .black))
+                .foregroundStyle(.white)
         }
     }
 }

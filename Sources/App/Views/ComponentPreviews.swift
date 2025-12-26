@@ -240,6 +240,66 @@ import Domain
     .background(AppTheme.backgroundGradient(for: .dark))
 }
 
+// MARK: - Update Badge Preview
+
+#Preview("Update Badge") {
+    HStack(spacing: 40) {
+        // Dark mode - default
+        VStack(spacing: 12) {
+            ZStack {
+                Circle()
+                    .fill(AppTheme.glassBackground(for: .dark))
+                    .frame(width: 32, height: 32)
+                Image(systemName: "gearshape.fill")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(AppTheme.textSecondary(for: .dark))
+                UpdateBadge(isChristmas: false)
+                    .offset(x: 14, y: -14)
+            }
+            Text("Dark")
+                .font(.caption)
+                .foregroundStyle(.white)
+        }
+
+        // Light mode
+        VStack(spacing: 12) {
+            ZStack {
+                Circle()
+                    .fill(AppTheme.glassBackground(for: .light))
+                    .frame(width: 32, height: 32)
+                Image(systemName: "gearshape.fill")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(AppTheme.textSecondary(for: .light))
+                UpdateBadge(isChristmas: false)
+                    .offset(x: 14, y: -14)
+            }
+            .environment(\.colorScheme, .light)
+            Text("Light")
+                .font(.caption)
+                .foregroundStyle(.white)
+        }
+
+        // Christmas mode
+        VStack(spacing: 12) {
+            ZStack {
+                Circle()
+                    .fill(AppTheme.christmasGlassBackground)
+                    .frame(width: 32, height: 32)
+                Image(systemName: "gearshape.fill")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(AppTheme.christmasTextSecondary)
+                UpdateBadge(isChristmas: true)
+                    .offset(x: 14, y: -14)
+            }
+            Text("Christmas")
+                .font(.caption)
+                .foregroundStyle(.white)
+        }
+    }
+    .padding(40)
+    .background(AppTheme.backgroundGradient(for: .dark))
+}
+
 // MARK: - Full Header Preview
 
 #Preview("Header Section") {
