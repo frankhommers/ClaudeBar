@@ -114,15 +114,10 @@ EXISTING_BETA_ITEM=""
 if [[ -f "$APPCAST_FILE" ]]; then
     echo "Found existing appcast, extracting items..."
 
-    # Extract all items using awk
-    # Each item block is between <item> and </item>
+    # Extract all items using awk (each item block is between <item> and </item>)
     ITEMS=$(awk '/<item>/,/<\/item>/' "$APPCAST_FILE")
 
-    # Check if there's a stable item (no sparkle:channel tag)
-    # We use a temp file approach for multi-line matching
-    echo "$ITEMS" | awk '/<item>/,/<\/item>/' | while read -r line; do :; done
-
-    # Extract stable item (item without sparkle:channel)
+    # Extract the first stable item (item without sparkle:channel)
     EXISTING_STABLE_ITEM=$(echo "$ITEMS" | awk '
         /<item>/ { item=""; in_item=1 }
         in_item { item = item $0 "\n" }
@@ -130,11 +125,12 @@ if [[ -f "$APPCAST_FILE" ]]; then
             in_item=0
             if (item !~ /<sparkle:channel>/) {
                 print item
+                exit  # Only keep the first stable item
             }
         }
     ')
 
-    # Extract beta item (item with sparkle:channel)
+    # Extract the first beta item (item with sparkle:channel)
     EXISTING_BETA_ITEM=$(echo "$ITEMS" | awk '
         /<item>/ { item=""; in_item=1 }
         in_item { item = item $0 "\n" }
@@ -142,19 +138,19 @@ if [[ -f "$APPCAST_FILE" ]]; then
             in_item=0
             if (item ~ /<sparkle:channel>/) {
                 print item
+                exit  # Only keep the first beta item
             }
         }
     ')
 
+    # Trim trailing empty lines from extracted items
     if [[ -n "$EXISTING_STABLE_ITEM" ]]; then
-        # Trim trailing newlines and ensure proper indentation
-        EXISTING_STABLE_ITEM=$(echo "$EXISTING_STABLE_ITEM" | sed '/^$/d')
+        EXISTING_STABLE_ITEM=$(printf '%s' "$EXISTING_STABLE_ITEM" | sed '/^[[:space:]]*$/d')
         echo "Found existing stable item"
     fi
 
     if [[ -n "$EXISTING_BETA_ITEM" ]]; then
-        # Trim trailing newlines and ensure proper indentation
-        EXISTING_BETA_ITEM=$(echo "$EXISTING_BETA_ITEM" | sed '/^$/d')
+        EXISTING_BETA_ITEM=$(printf '%s' "$EXISTING_BETA_ITEM" | sed '/^[[:space:]]*$/d')
         echo "Found existing beta item"
     fi
 fi
@@ -172,8 +168,7 @@ if $IS_BETA; then
     # Keep existing stable if present
     ITEMS_TO_WRITE="$NEW_ITEM"
     if [[ -n "$EXISTING_STABLE_ITEM" ]]; then
-        ITEMS_TO_WRITE="$ITEMS_TO_WRITE
-$EXISTING_STABLE_ITEM"
+        ITEMS_TO_WRITE=$(printf '%s\n%s' "$NEW_ITEM" "$EXISTING_STABLE_ITEM")
         echo "Keeping existing stable version alongside new beta"
     fi
 else
@@ -182,8 +177,7 @@ else
     # Keep existing beta if present
     ITEMS_TO_WRITE="$NEW_ITEM"
     if [[ -n "$EXISTING_BETA_ITEM" ]]; then
-        ITEMS_TO_WRITE="$ITEMS_TO_WRITE
-$EXISTING_BETA_ITEM"
+        ITEMS_TO_WRITE=$(printf '%s\n%s' "$NEW_ITEM" "$EXISTING_BETA_ITEM")
         echo "Keeping existing beta version alongside new stable"
     fi
 fi
