@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.10] - 2025-12-31
+
+### Improved
+- **Z.ai Quota Reset Time**: Now displays when your Z.ai quota will reset, helping you plan your usage effectively
+
+### Technical
+- Added flexible date parsing for Z.ai API responses (supports ISO-8601 with timezone and milliseconds)
+
 ## [0.2.9] - 2025-12-31
 
 ### Added
@@ -134,8 +142,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Menu bar interface with quota display
 - Automatic refresh every 5 minutes
 
-[Unreleased]: https://github.com/tddworks/ClaudeBar/compare/v0.2.9...HEAD
-[0.2.9]: https://github.com/tddworks/ClaudeBar/compare/v0.2.7...v0.2.9
+[Unreleased]: https://github.com/tddworks/ClaudeBar/compare/v0.2.10...HEAD
+[0.2.10]: https://github.com/tddworks/ClaudeBar/compare/v0.2.9...v0.2.10
+[0.2.9]: https://github.com/tddworks/ClaudeBar/compare/v0.2.8...v0.2.9
+[0.2.8]: https://github.com/tddworks/ClaudeBar/compare/v0.2.7...v0.2.8
 [0.2.7]: https://github.com/tddworks/ClaudeBar/compare/v0.2.6...v0.2.7
 [0.2.6]: https://github.com/tddworks/ClaudeBar/compare/v0.2.5...v0.2.6
 [0.2.5]: https://github.com/tddworks/ClaudeBar/compare/v0.2.4...v0.2.5
