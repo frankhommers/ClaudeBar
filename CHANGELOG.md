@@ -7,14 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.9] - 2025-12-31
+
 ### Added
-- **Z.ai GLM Coding Plan Support**: Monitor your Z.ai (GLM Coding Plan) usage quota. Automatically detects Z.ai configuration in Claude Code settings and queries the quota limit API for 5-hour session and MCP usage tracking.
+- **Z.ai GLM Coding Plan Support**: Monitor your [Z.ai GLM Coding Plan](https://z.ai/subscribe) usage quota directly from the menu bar. Automatically detects Z.ai configuration in Claude Code settings and displays your 5-hour session limit and MCP usage in real-time.
 - **Provider Icon**: New Z.ai icon with blue branding in the provider list
 
 ### Technical
-- Implemented `ZaiUsageProbe` with config file parsing (supports `env` and `providers` formats)
+- Implemented `ZaiUsageProbe` with Bearer authentication and config file parsing (supports `env` and `providers` formats)
 - Added `ZaiProvider` domain model with observable state
+- Added `QuotaType.timeLimit` for semantic mapping of time-based quotas (MCP usage)
 - Comprehensive test coverage (27 tests) for parsing, behavior, and error handling
+
+## [0.2.8] - 2025-12-30
+
+### Fixed
+- Bug fixes and improvements.
 
 ## [0.2.7] - 2025-12-29
 
@@ -126,7 +134,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Menu bar interface with quota display
 - Automatic refresh every 5 minutes
 
-[Unreleased]: https://github.com/tddworks/ClaudeBar/compare/v0.2.7...HEAD
+[Unreleased]: https://github.com/tddworks/ClaudeBar/compare/v0.2.9...HEAD
+[0.2.9]: https://github.com/tddworks/ClaudeBar/compare/v0.2.7...v0.2.9
 [0.2.7]: https://github.com/tddworks/ClaudeBar/compare/v0.2.6...v0.2.7
 [0.2.6]: https://github.com/tddworks/ClaudeBar/compare/v0.2.5...v0.2.6
 [0.2.5]: https://github.com/tddworks/ClaudeBar/compare/v0.2.4...v0.2.5

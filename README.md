@@ -162,7 +162,7 @@ ClaudeBar uses a layered architecture with protocol-based dependency injection:
                         ▼
 ┌─────────────────────────────────────────────────────────┐
 │                 Infrastructure Layer                    │
-│  Probes: Claude, Codex, Gemini, Copilot, Antigravity    │
+│  Probes: Claude, Codex, Gemini, Copilot, Antigravity, Z.ai │
 │  Adapters: Pure 3rd-party wrappers (no coverage)        │
 └─────────────────────────────────────────────────────────┘
 ```
