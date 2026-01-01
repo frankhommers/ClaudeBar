@@ -41,20 +41,16 @@ struct QuotaAlerterTests {
     // MARK: - Provider Display Name Tests
 
     @Test
-    func `providerDisplayName uses registry for registered provider`() {
-        // Given - register providers using Mockable
-        let mockProbe = MockUsageProbe()
-        AIProviderRegistry.shared.register([
-            ClaudeProvider(probe: mockProbe),
-            CodexProvider(probe: mockProbe),
-            GeminiProvider(probe: mockProbe)
-        ])
+    func `providerDisplayName returns correct names for known providers`() {
         let alerter = QuotaAlerter()
 
-        // Then - returns provider name from registry
+        // Then - returns correct provider names
         #expect(alerter.providerDisplayName(for: "claude") == "Claude")
         #expect(alerter.providerDisplayName(for: "codex") == "Codex")
         #expect(alerter.providerDisplayName(for: "gemini") == "Gemini")
+        #expect(alerter.providerDisplayName(for: "copilot") == "GitHub Copilot")
+        #expect(alerter.providerDisplayName(for: "antigravity") == "Antigravity")
+        #expect(alerter.providerDisplayName(for: "zai") == "Z.ai")
     }
 
     @Test

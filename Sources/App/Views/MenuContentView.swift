@@ -17,7 +17,6 @@ struct MenuContentView: View {
     #if ENABLE_SPARKLE
     @Environment(\.sparkleUpdater) private var sparkleUpdater
     #endif
-    @State private var selectedProviderId: String = "claude"
     @State private var isHoveringRefresh = false
     @State private var animateIn = false
     @State private var showSettings = false
@@ -25,9 +24,15 @@ struct MenuContentView: View {
     @State private var settings = AppSettings.shared
     @State private var hasRequestedNotificationPermission = false
 
+    /// The currently selected provider ID (from monitor, which is @Observable)
+    private var selectedProviderId: String {
+        get { monitor.selectedProviderId }
+        nonmutating set { monitor.selectedProviderId = newValue }
+    }
+
     /// The currently selected provider
     private var selectedProvider: (any AIProvider)? {
-        monitor.enabledProviders.first { $0.id == selectedProviderId }
+        monitor.selectedProvider
     }
 
     var body: some View {
@@ -658,8 +663,7 @@ struct ProviderPill: View {
     }
 
     private var providerIcon: String {
-        AIProviderRegistry.shared.provider(for: providerId)?.symbolIconOrDefault
-            ?? "questionmark.circle.fill"
+        AppTheme.providerSymbolIcon(for: providerId)
     }
 }
 

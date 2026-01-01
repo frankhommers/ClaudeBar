@@ -81,7 +81,15 @@ public final class QuotaAlerter: QuotaStatusListener, @unchecked Sendable {
     }
 
     func providerDisplayName(for providerId: String) -> String {
-        AIProviderRegistry.shared.provider(for: providerId)?.name ?? providerId.capitalized
+        switch providerId {
+        case "claude": return "Claude"
+        case "codex": return "Codex"
+        case "gemini": return "Gemini"
+        case "copilot": return "GitHub Copilot"
+        case "antigravity": return "Antigravity"
+        case "zai": return "Z.ai"
+        default: return providerId.capitalized
+        }
     }
 
     func alertBody(for status: QuotaStatus, providerName: String) -> String {

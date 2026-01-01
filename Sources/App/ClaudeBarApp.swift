@@ -42,9 +42,6 @@ struct ClaudeBarApp: App {
 
         AppLog.providers.info("Created \(providers.count) providers")
 
-        // Register providers for visual identity lookups (icons, colors)
-        AIProviderRegistry.shared.register(providers)
-
         // Initialize the domain service with quota alerter
         // QuotaMonitor owns the AIProviders repository
         monitor = QuotaMonitor(
@@ -79,7 +76,7 @@ struct ClaudeBarApp: App {
             #endif
         } label: {
             // Show overall status (worst across all enabled providers) in menu bar
-            StatusBarIcon(status: monitor.overallStatus(), isChristmas: currentThemeMode == .christmas)
+            StatusBarIcon(status: monitor.overallStatus, isChristmas: currentThemeMode == .christmas)
         }
         .menuBarExtraStyle(.window)
     }

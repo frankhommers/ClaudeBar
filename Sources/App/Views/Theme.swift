@@ -708,25 +708,111 @@ extension View {
 }
 
 // MARK: - Provider Colors (by ID)
-// These delegate to the provider's visual identity, eliminating hardcoded switches.
+// Static visual identity based on provider ID - no registry needed.
 
 extension AppTheme {
-    /// Get provider theme color by ID (delegates to provider's visual identity)
+    /// Get provider theme color by ID
     static func providerColor(for providerId: String, scheme: ColorScheme) -> Color {
-        AIProviderRegistry.shared.provider(for: providerId)?
-            .themeColorOrDefault(for: scheme) ?? purpleVibrant(for: scheme)
+        switch providerId {
+        case "claude":
+            return coralAccent(for: scheme)
+        case "codex":
+            return tealBright(for: scheme)
+        case "gemini":
+            return goldenGlow(for: scheme)
+        case "copilot":
+            return scheme == .dark
+                ? Color(red: 0.38, green: 0.55, blue: 0.93)
+                : Color(red: 0.26, green: 0.43, blue: 0.82)
+        case "antigravity":
+            return scheme == .dark
+                ? Color(red: 0.72, green: 0.35, blue: 0.85)
+                : Color(red: 0.58, green: 0.22, blue: 0.72)
+        case "zai":
+            return scheme == .dark
+                ? Color(red: 0.35, green: 0.60, blue: 1.0)
+                : Color(red: 0.23, green: 0.51, blue: 0.96)
+        default:
+            return purpleVibrant(for: scheme)
+        }
     }
 
-    /// Get provider gradient by ID (delegates to provider's visual identity)
+    /// Get provider gradient by ID
     static func providerGradient(for providerId: String, scheme: ColorScheme) -> LinearGradient {
-        AIProviderRegistry.shared.provider(for: providerId)?
-            .themeGradientOrDefault(for: scheme) ?? accentGradient(for: scheme)
+        let primaryColor = providerColor(for: providerId, scheme: scheme)
+        let secondaryColor: Color
+
+        switch providerId {
+        case "claude":
+            secondaryColor = pinkHot(for: scheme)
+        case "codex":
+            secondaryColor = scheme == .dark
+                ? Color(red: 0.25, green: 0.65, blue: 0.85)
+                : Color(red: 0.12, green: 0.52, blue: 0.72)
+        case "gemini":
+            secondaryColor = scheme == .dark
+                ? Color(red: 0.95, green: 0.55, blue: 0.35)
+                : Color(red: 0.85, green: 0.45, blue: 0.25)
+        case "copilot":
+            secondaryColor = scheme == .dark
+                ? Color(red: 0.55, green: 0.40, blue: 0.90)
+                : Color(red: 0.45, green: 0.30, blue: 0.80)
+        case "antigravity":
+            secondaryColor = scheme == .dark
+                ? Color(red: 0.45, green: 0.25, blue: 0.75)
+                : Color(red: 0.35, green: 0.15, blue: 0.65)
+        case "zai":
+            secondaryColor = scheme == .dark
+                ? Color(red: 0.30, green: 0.45, blue: 0.85)
+                : Color(red: 0.20, green: 0.35, blue: 0.75)
+        default:
+            return accentGradient(for: scheme)
+        }
+
+        return LinearGradient(
+            colors: [primaryColor, secondaryColor],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
     }
 
-    /// Get provider icon asset name by ID (delegates to provider's visual identity)
+    /// Get provider icon asset name by ID
     static func providerIconAssetName(for providerId: String) -> String {
-        AIProviderRegistry.shared.provider(for: providerId)?
-            .iconAssetNameOrDefault ?? "QuestionIcon"
+        switch providerId {
+        case "claude": return "ClaudeIcon"
+        case "codex": return "CodexIcon"
+        case "gemini": return "GeminiIcon"
+        case "copilot": return "CopilotIcon"
+        case "antigravity": return "AntigravityIcon"
+        case "zai": return "ZaiIcon"
+        default: return "QuestionIcon"
+        }
+    }
+
+    /// Get provider display name by ID
+    static func providerName(for providerId: String) -> String {
+        switch providerId {
+        case "claude": return "Claude"
+        case "codex": return "Codex"
+        case "gemini": return "Gemini"
+        case "copilot": return "GitHub Copilot"
+        case "antigravity": return "Antigravity"
+        case "zai": return "Z.ai"
+        default: return providerId.capitalized
+        }
+    }
+
+    /// Get provider SF symbol icon by ID
+    static func providerSymbolIcon(for providerId: String) -> String {
+        switch providerId {
+        case "claude": return "brain.fill"
+        case "codex": return "chevron.left.forwardslash.chevron.right"
+        case "gemini": return "sparkles"
+        case "copilot": return "chevron.left.forwardslash.chevron.right"
+        case "antigravity": return "wand.and.stars"
+        case "zai": return "z.square.fill"
+        default: return "questionmark.circle.fill"
+        }
     }
 }
 

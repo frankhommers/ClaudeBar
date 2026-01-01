@@ -1,4 +1,5 @@
 import Foundation
+import Observation
 
 /// Events emitted during continuous monitoring
 public enum MonitoringEvent: Sendable {
@@ -11,7 +12,8 @@ public enum MonitoringEvent: Sendable {
 /// The main domain service that coordinates quota monitoring across AI providers.
 /// Providers are rich domain models that own their own snapshots.
 /// QuotaMonitor coordinates refreshes and optionally notifies a status handler.
-public actor QuotaMonitor {
+@Observable
+public final class QuotaMonitor: @unchecked Sendable {
     /// The providers repository (internal - access via delegation methods)
     private let providers: AIProviders
 
@@ -28,8 +30,7 @@ public actor QuotaMonitor {
     public private(set) var isMonitoring: Bool = false
 
     /// The currently selected provider ID (for UI display)
-    /// nonisolated(unsafe) because UI needs synchronous access
-    public nonisolated(unsafe) var selectedProviderId: String = "claude"
+    public var selectedProviderId: String = "claude"
 
     // MARK: - Initialization
 
@@ -118,30 +119,30 @@ public actor QuotaMonitor {
         }
     }
 
-    // MARK: - Queries (nonisolated for UI access)
+    // MARK: - Queries
 
     /// Returns the provider with the given ID
-    public nonisolated func provider(for id: String) -> (any AIProvider)? {
+    public func provider(for id: String) -> (any AIProvider)? {
         providers.provider(id: id)
     }
 
     /// Returns all providers
-    public nonisolated var allProviders: [any AIProvider] {
+    public var allProviders: [any AIProvider] {
         providers.all
     }
 
     /// Returns only enabled providers
-    public nonisolated var enabledProviders: [any AIProvider] {
+    public var enabledProviders: [any AIProvider] {
         providers.enabled
     }
 
     /// Adds a provider dynamically
-    public nonisolated func addProvider(_ provider: any AIProvider) {
+    public func addProvider(_ provider: any AIProvider) {
         providers.add(provider)
     }
 
     /// Removes a provider by ID
-    public nonisolated func removeProvider(id: String) {
+    public func removeProvider(id: String) {
         providers.remove(id: id)
     }
 
@@ -153,26 +154,26 @@ public actor QuotaMonitor {
     }
 
     /// Returns the overall status across enabled providers (worst status wins)
-    public nonisolated func overallStatus() -> QuotaStatus {
+    public var overallStatus: QuotaStatus {
         providers.enabled
             .compactMap(\.snapshot?.overallStatus)
             .max() ?? .healthy
     }
 
-    // MARK: - Selection (nonisolated for UI access)
+    // MARK: - Selection
 
     /// The currently selected provider (from enabled providers)
-    public nonisolated var selectedProvider: (any AIProvider)? {
+    public var selectedProvider: (any AIProvider)? {
         providers.enabled.first { $0.id == selectedProviderId }
     }
 
     /// Status of the currently selected provider (for menu bar icon)
-    public nonisolated var selectedProviderStatus: QuotaStatus {
+    public var selectedProviderStatus: QuotaStatus {
         selectedProvider?.snapshot?.overallStatus ?? .healthy
     }
 
     /// Whether any provider is currently refreshing
-    public nonisolated var isRefreshing: Bool {
+    public var isRefreshing: Bool {
         providers.all.contains { $0.isSyncing }
     }
 

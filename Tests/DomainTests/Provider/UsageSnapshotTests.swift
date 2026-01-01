@@ -193,46 +193,6 @@ struct UsageSnapshotTests {
 
     // MARK: - Provider Lookup (Rich Domain Model)
 
-    @Test
-    func `snapshot can lookup its provider from registry`() {
-        // Given - register providers
-        let claude = ClaudeProvider(probe: MockUsageProbe())
-        AIProviderRegistry.shared.register([claude])
-
-        // When - create snapshot for registered provider
-        let snapshot = UsageSnapshot(providerId: "claude", quotas: [], capturedAt: Date())
-
-        // Then - snapshot can find its provider
-        #expect(snapshot.provider != nil)
-        #expect(snapshot.provider?.id == "claude")
-        #expect(snapshot.provider?.name == "Claude")
-    }
-
-    @Test
-    func `snapshot returns nil for unregistered provider`() {
-        // When - create snapshot for unknown provider
-        let snapshot = UsageSnapshot(providerId: "unknown-provider", quotas: [], capturedAt: Date())
-
-        // Then - no provider found
-        #expect(snapshot.provider == nil)
-    }
-
-    @Test
-    func `snapshot provider lookup returns correct provider among multiple`() {
-        // Given - multiple providers registered
-        let claude = ClaudeProvider(probe: MockUsageProbe())
-        let codex = CodexProvider(probe: MockUsageProbe())
-        let gemini = GeminiProvider(probe: MockUsageProbe())
-        AIProviderRegistry.shared.register([claude, codex, gemini])
-
-        // When - create snapshot for codex
-        let snapshot = UsageSnapshot(providerId: "codex", quotas: [], capturedAt: Date())
-
-        // Then - finds correct provider
-        #expect(snapshot.provider?.id == "codex")
-        #expect(snapshot.provider?.name == "Codex")
-    }
-
     // MARK: - Account Information
 
     @Test

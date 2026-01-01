@@ -58,6 +58,6 @@ struct ProviderSectionView: View {
     }
 
     private var providerDisplayName: String {
-        snapshot.provider?.name ?? snapshot.providerId.capitalized
+        AppTheme.providerName(for: snapshot.providerId)
     }
 }
