@@ -10,7 +10,6 @@ import Sparkle
 /// Christmas theme adds festive colors, snowfall, and holiday orbs.
 struct MenuContentView: View {
     let monitor: QuotaMonitor
-    let appState: AppState
     let quotaAlerter: QuotaAlerter
 
     @Environment(\.colorScheme) private var colorScheme
@@ -18,7 +17,6 @@ struct MenuContentView: View {
     #if ENABLE_SPARKLE
     @Environment(\.sparkleUpdater) private var sparkleUpdater
     #endif
-    @State private var selectedProviderId: String = "claude"
     @State private var isHoveringRefresh = false
     @State private var animateIn = false
     @State private var showSettings = false
@@ -26,9 +24,14 @@ struct MenuContentView: View {
     @State private var settings = AppSettings.shared
     @State private var hasRequestedNotificationPermission = false
 
-    /// The currently selected provider (only from enabled providers)
+    /// The currently selected provider (from monitor)
     private var selectedProvider: (any AIProvider)? {
-        appState.providers.first { $0.id == selectedProviderId && $0.isEnabled }
+        monitor.selectedProvider
+    }
+
+    /// Currently selected provider ID (from monitor)
+    private var selectedProviderId: String {
+        monitor.selectedProviderId
     }
 
     var body: some View {
@@ -51,7 +54,7 @@ struct MenuContentView: View {
 
             if showSettings {
                 // Settings View
-                SettingsContentView(showSettings: $showSettings, appState: appState)
+                SettingsContentView(showSettings: $showSettings, monitor: monitor)
             } else {
                 // Main Content
                 VStack(spacing: 0) {
@@ -268,7 +271,7 @@ struct MenuContentView: View {
 
     /// Only show enabled providers in the pills
     private var enabledProviders: [any AIProvider] {
-        appState.providers.filter { $0.isEnabled }
+        monitor.providers.enabled
     }
 
     private var providerPills: some View {
@@ -281,9 +284,8 @@ struct MenuContentView: View {
                         isSelected: provider.id == selectedProviderId,
                         hasData: provider.snapshot != nil
                     ) {
-                        withAnimation(.spring(response: 0.35, dampingFraction: 0.7)) {
-                            selectedProviderId = provider.id
-                            appState.selectedProviderId = provider.id  // Sync to AppState for menu bar icon
+                        Task {
+                            await monitor.selectProvider(id: provider.id)
                         }
                     }
                 }
@@ -292,11 +294,10 @@ struct MenuContentView: View {
         .opacity(animateIn ? 1 : 0)
         .offset(y: animateIn ? 0 : 10)
         .animation(.easeOut(duration: 0.5).delay(0.1), value: animateIn)
-        .onChange(of: enabledProviders.map(\.id)) { _, newIds in
+        .onChange(of: enabledProviders.map(\.id)) { _, _ in
             // If currently selected provider is disabled, select first enabled one
-            if !newIds.contains(selectedProviderId), let firstId = newIds.first {
-                selectedProviderId = firstId
-                appState.selectedProviderId = firstId
+            Task {
+                await monitor.ensureValidSelection()
             }
         }
     }
@@ -556,7 +557,7 @@ struct MenuContentView: View {
 
     /// Refresh a specific provider by ID
     private func refresh(providerId: String) async {
-        guard let provider = appState.providers.first(where: { $0.id == providerId }) else {
+        guard let provider = monitor.providers.provider(id: providerId) else {
             return
         }
 
@@ -565,9 +566,8 @@ struct MenuContentView: View {
 
         do {
             try await provider.refresh()
-            appState.lastError = nil
         } catch {
-            appState.lastError = error.localizedDescription
+            // Provider stores error in lastError
         }
     }
 
@@ -586,7 +586,7 @@ struct MenuContentView: View {
                 showSharePass = true
             }
         } catch {
-            appState.lastError = error.localizedDescription
+            // Provider stores error in lastError
         }
     }
 }

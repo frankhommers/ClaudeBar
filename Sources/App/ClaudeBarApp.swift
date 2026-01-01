@@ -5,64 +5,11 @@ import Infrastructure
 import Sparkle
 #endif
 
-/// Shared app state observable by all views
-@Observable
-final class AppState {
-    /// The registered providers (rich domain models)
-    var providers: [any AIProvider] = []
-
-    /// The currently selected provider ID (for menu bar icon status)
-    var selectedProviderId: String = "claude"
-
-    /// The overall status across all providers
-    var overallStatus: QuotaStatus {
-        providers
-            .compactMap(\.snapshot?.overallStatus)
-            .max() ?? .healthy
-    }
-
-    /// Status of the currently selected provider (for menu bar icon)
-    var selectedProviderStatus: QuotaStatus {
-        providers.first { $0.id == selectedProviderId }?.snapshot?.overallStatus ?? .healthy
-    }
-
-    /// Whether any provider is currently refreshing
-    var isRefreshing: Bool {
-        providers.contains { $0.isSyncing }
-    }
-
-    /// Last error message, if any
-    var lastError: String?
-
-    init(providers: [any AIProvider] = []) {
-        self.providers = providers
-    }
-
-    /// Adds a provider if not already present
-    func addProvider(_ provider: any AIProvider) {
-        guard !providers.contains(where: { $0.id == provider.id }) else {
-            AppLog.providers.debug("Provider already exists: \(provider.id)")
-            return
-        }
-        providers.append(provider)
-        AIProviderRegistry.shared.register([provider])
-        AppLog.providers.info("Added provider: \(provider.id)")
-    }
-
-    /// Removes a provider by ID
-    func removeProvider(id: String) {
-        providers.removeAll { $0.id == id }
-        AppLog.providers.info("Removed provider: \(id)")
-    }
-}
-
 @main
 struct ClaudeBarApp: App {
     /// The main domain service - monitors all AI providers
+    /// This is the single source of truth for providers and their state
     @State private var monitor: QuotaMonitor
-
-    /// Shared app state
-    @State private var appState = AppState()
 
     /// Alerts users when quota status degrades
     private let quotaAlerter = QuotaAlerter()
@@ -93,14 +40,10 @@ struct ClaudeBarApp: App {
             AppLog.providers.debug("Copilot enabled but no token configured")
         }
 
-        // Register providers for global access
-        AIProviderRegistry.shared.register(providers)
-        AppLog.providers.info("Registered \(providers.count) providers")
-
-        // Store providers in app state
-        appState = AppState(providers: providers)
+        AppLog.providers.info("Created \(providers.count) providers")
 
         // Initialize the domain service with quota alerter
+        // QuotaMonitor owns the AIProviders repository
         monitor = QuotaMonitor(
             providers: providers,
             statusListener: quotaAlerter
@@ -124,15 +67,15 @@ struct ClaudeBarApp: App {
     var body: some Scene {
         MenuBarExtra {
             #if ENABLE_SPARKLE
-            MenuContentView(monitor: monitor, appState: appState, quotaAlerter: quotaAlerter)
+            MenuContentView(monitor: monitor, quotaAlerter: quotaAlerter)
                 .themeProvider(currentThemeMode)
                 .environment(\.sparkleUpdater, sparkleUpdater)
             #else
-            MenuContentView(monitor: monitor, appState: appState, quotaAlerter: quotaAlerter)
+            MenuContentView(monitor: monitor, quotaAlerter: quotaAlerter)
                 .themeProvider(currentThemeMode)
             #endif
         } label: {
-            StatusBarIcon(status: appState.selectedProviderStatus, isChristmas: currentThemeMode == .christmas)
+            StatusBarIcon(status: monitor.selectedProviderStatus, isChristmas: currentThemeMode == .christmas)
         }
         .menuBarExtraStyle(.window)
     }

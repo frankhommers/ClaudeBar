@@ -8,7 +8,7 @@ public final class AIProviders: @unchecked Sendable {
     // MARK: - All Providers
 
     /// All registered providers
-    public let all: [any AIProvider]
+    public private(set) var all: [any AIProvider]
 
     // MARK: - Filtered Views
 
@@ -32,5 +32,22 @@ public final class AIProviders: @unchecked Sendable {
     /// - Returns: The provider if found, nil otherwise
     public func provider(id: String) -> (any AIProvider)? {
         all.first { $0.id == id }
+    }
+
+    // MARK: - Dynamic Provider Management
+
+    /// Adds a provider if not already present
+    /// - Parameter provider: The provider to add
+    public func add(_ provider: any AIProvider) {
+        guard !all.contains(where: { $0.id == provider.id }) else {
+            return
+        }
+        all.append(provider)
+    }
+
+    /// Removes a provider by ID
+    /// - Parameter id: The provider identifier to remove
+    public func remove(id: String) {
+        all.removeAll { $0.id == id }
     }
 }

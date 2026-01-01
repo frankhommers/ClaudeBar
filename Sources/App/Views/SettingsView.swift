@@ -8,7 +8,7 @@ import Sparkle
 /// Inline settings content view that fits within the menu bar popup.
 struct SettingsContentView: View {
     @Binding var showSettings: Bool
-    let appState: AppState
+    let monitor: QuotaMonitor
     @Environment(\.colorScheme) private var colorScheme
     @State private var settings = AppSettings.shared
 
@@ -178,7 +178,7 @@ struct SettingsContentView: View {
 
             // Provider toggles
             VStack(spacing: 8) {
-                ForEach(appState.providers, id: \.id) { provider in
+                ForEach(monitor.providers.all, id: \.id) { provider in
                     providerToggleRow(provider: provider)
                 }
             }
@@ -941,7 +941,7 @@ struct SettingsContentView: View {
         // Add Copilot provider if enabled and not already present
         if settings.copilotEnabled {
             let copilotProvider = CopilotProvider(probe: CopilotUsageProbe())
-            appState.addProvider(copilotProvider)
+            monitor.providers.add(copilotProvider)
 
             // Trigger refresh for the new provider
             Task {
@@ -957,7 +957,7 @@ struct SettingsContentView: View {
     private func deleteToken() {
         settings.deleteCopilotToken()
         saveError = nil
-        appState.removeProvider(id: "copilot")
+        monitor.providers.remove(id: "copilot")
     }
 }
 
@@ -1091,7 +1091,7 @@ struct ThemeOptionButton: View {
 #Preview("Settings - Dark") {
     ZStack {
         AppTheme.backgroundGradient(for: .dark)
-        SettingsContentView(showSettings: .constant(true), appState: AppState())
+        SettingsContentView(showSettings: .constant(true), monitor: QuotaMonitor(providers: []))
     }
     .frame(width: 380, height: 420)
     .preferredColorScheme(.dark)
@@ -1100,7 +1100,7 @@ struct ThemeOptionButton: View {
 #Preview("Settings - Light") {
     ZStack {
         AppTheme.backgroundGradient(for: .light)
-        SettingsContentView(showSettings: .constant(true), appState: AppState())
+        SettingsContentView(showSettings: .constant(true), monitor: QuotaMonitor(providers: []))
     }
     .frame(width: 380, height: 420)
     .preferredColorScheme(.light)

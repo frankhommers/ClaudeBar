@@ -12,8 +12,8 @@ public enum MonitoringEvent: Sendable {
 /// Providers are rich domain models that own their own snapshots.
 /// QuotaMonitor coordinates refreshes and optionally notifies a status handler.
 public actor QuotaMonitor {
-    /// The providers repository
-    public let providers: AIProviders
+    /// The providers repository (nonisolated for UI access - AIProviders is Sendable)
+    public nonisolated let providers: AIProviders
 
     /// Optional listener for status changes (e.g., QuotaAlerter)
     private let statusListener: (any QuotaStatusListener)?
@@ -26,6 +26,10 @@ public actor QuotaMonitor {
 
     /// Whether monitoring is active
     public private(set) var isMonitoring: Bool = false
+
+    /// The currently selected provider ID (for UI display)
+    /// nonisolated(unsafe) because UI needs synchronous access
+    public nonisolated(unsafe) var selectedProviderId: String = "claude"
 
     // MARK: - Initialization
 
@@ -143,6 +147,38 @@ public actor QuotaMonitor {
         providers.enabled
             .compactMap(\.snapshot?.overallStatus)
             .max() ?? .healthy
+    }
+
+    // MARK: - Selection (nonisolated for UI access)
+
+    /// The currently selected provider (from enabled providers)
+    public nonisolated var selectedProvider: (any AIProvider)? {
+        providers.enabled.first { $0.id == selectedProviderId }
+    }
+
+    /// Status of the currently selected provider (for menu bar icon)
+    public nonisolated var selectedProviderStatus: QuotaStatus {
+        selectedProvider?.snapshot?.overallStatus ?? .healthy
+    }
+
+    /// Whether any provider is currently refreshing
+    public nonisolated var isRefreshing: Bool {
+        providers.all.contains { $0.isSyncing }
+    }
+
+    /// Selects a provider by ID (must be enabled)
+    public func selectProvider(id: String) {
+        if providers.enabled.contains(where: { $0.id == id }) {
+            selectedProviderId = id
+        }
+    }
+
+    /// Selects the first enabled provider if current selection is invalid
+    public func ensureValidSelection() {
+        if !providers.enabled.contains(where: { $0.id == selectedProviderId }),
+           let firstEnabled = providers.enabled.first {
+            selectedProviderId = firstEnabled.id
+        }
     }
 
     // MARK: - Continuous Monitoring
