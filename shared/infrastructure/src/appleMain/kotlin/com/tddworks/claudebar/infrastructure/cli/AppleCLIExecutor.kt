@@ -61,24 +61,33 @@ class AppleCLIExecutor : CLIExecutor {
             binary
         }
 
-        val command = buildString {
+        // Build the inner command
+        val innerCommand = buildString {
             if (workingDirectory != null) {
                 append("cd \"$workingDirectory\" && ")
             }
-            // Use 'script' to create pseudo-TTY (needed for Claude CLI)
-            append("script -q /dev/null ")
             append(resolvedBinary)
-            // Filter out empty args
             args.filter { it.isNotEmpty() }.forEach { arg ->
                 append(" \"$arg\"")
             }
-            // Only add input redirection if input is non-empty
             if (!input.isNullOrEmpty()) {
                 append(" <<< \"$input\"")
             }
-            // Redirect stderr to stdout to capture all output
-            append(" 2>&1")
         }
+
+        // Set up PATH with common node/homebrew locations
+        val home = getenv("HOME")?.toKString() ?: ""
+        val nodePaths = listOf(
+            "$home/.nvm/versions/node/*/bin",  // nvm
+            "$home/.volta/bin",                 // volta
+            "$home/.nodenv/shims",              // nodenv
+            "/opt/homebrew/bin",                // homebrew arm64
+            "/usr/local/bin",                   // homebrew x86
+            "/usr/bin"
+        ).joinToString(":")
+
+        // Use script for PTY, set PATH explicitly
+        val command = "script -q /dev/null /bin/sh -c 'export PATH=\"$nodePaths:\$PATH\" && $innerCommand' 2>&1"
 
         println("[AppleCLIExecutor] Running: $command")
         val result = executeCommand(command)

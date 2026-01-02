@@ -33,30 +33,30 @@ object ClaudeBarShared {
 
     /**
      * Creates a fully configured QuotaMonitor with all providers.
-     * Swift provides repository and CLI executor implementations.
      *
      * @param settingsRepository Storage for provider enabled states (UserDefaults)
      * @param credentialRepository Storage for credentials (Keychain)
-     * @param cliExecutor CLI executor for running CLI commands (Swift InteractiveRunner)
+     * @param cliExecutor Optional CLI executor (defaults to AppleCLIExecutor)
      * @param alerter Optional alerter for quota status changes
      */
     fun createQuotaMonitor(
         settingsRepository: ProviderSettingsRepository,
         credentialRepository: CredentialRepository,
-        cliExecutor: CLIExecutor,
+        cliExecutor: CLIExecutor? = null,
         alerter: QuotaAlerter? = null
     ): QuotaMonitor {
+        val executor = cliExecutor ?: AppleCLIExecutor()
         val httpClient = createHttpClient()
         val networkClient = KtorNetworkClient(httpClient)
 
         val providers = listOf<AIProvider>(
             ClaudeProvider(
-                probe = ClaudeUsageProbe(cliExecutor),
+                probe = ClaudeUsageProbe(executor),
                 passProbe = null,  // ClaudePassProbe requires ClipboardReader
                 settingsRepository = settingsRepository
             ),
             CodexProvider(
-                probe = CodexUsageProbe(cliExecutor),
+                probe = CodexUsageProbe(executor),
                 settingsRepository = settingsRepository
             ),
             GeminiProvider(
@@ -68,14 +68,14 @@ object ClaudeBarShared {
             ),
             AntigravityProvider(
                 probe = AntigravityUsageProbe(
-                    cliExecutor = cliExecutor,
+                    cliExecutor = executor,
                     networkClient = networkClient
                 ),
                 settingsRepository = settingsRepository
             ),
             ZaiProvider(
                 probe = ZaiUsageProbe(
-                    cliExecutor = cliExecutor,
+                    cliExecutor = executor,
                     networkClient = networkClient
                 ),
                 settingsRepository = settingsRepository

@@ -5,7 +5,7 @@ import Infrastructure
 import Sparkle
 #endif
 
-@main
+//@main
 struct ClaudeBarApp: App {
     /// The main domain service - monitors all AI providers
     /// This is the single source of truth for providers and their state

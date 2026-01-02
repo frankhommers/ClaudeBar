@@ -12,6 +12,7 @@ typealias KmpQuotaStatus = ClaudeBarShared.QuotaStatus
 typealias KmpAIProvider = ClaudeBarShared.AIProvider
 typealias KmpProviderSettingsRepository = ClaudeBarShared.ProviderSettingsRepository
 typealias KmpCredentialRepository = ClaudeBarShared.CredentialRepository
+typealias KmpCLIExecutor = ClaudeBarShared.CLIExecutor
 typealias KmpUsageSnapshot = ClaudeBarShared.UsageSnapshot
 
 // MARK: - Build Instructions
@@ -20,43 +21,32 @@ typealias KmpUsageSnapshot = ClaudeBarShared.UsageSnapshot
 // 3. Swap @main: uncomment below, comment in ClaudeBarApp.swift
 
 /// Alternative app entry point using KMP shared domain layer.
-/// Mirrors ClaudeBarApp structure but uses Kotlin Multiplatform types.
- @main  // Uncomment to use KMP version
+/// Uses QuotaMonitor directly with SKIE's StateFlow support.
+@main
 struct ClaudeBarAppKmp: App {
-    /// The KMP QuotaMonitor - single source of truth
-    @State private var monitor: KmpQuotaMonitor
-
-    /// Bridge to make KMP types observable in SwiftUI
-    @State private var bridge: KmpBridge
+    let monitor: KmpQuotaMonitor
+    @State private var overallStatus: KmpQuotaStatus = .healthy
+    @State private var settings = AppSettings.shared
 
     #if ENABLE_SPARKLE
     @State private var sparkleUpdater = SparkleUpdater()
     #endif
 
     init() {
-        print("ClaudeBarAppKmp initializing with KMP shared code...")
-        print("ClaudeBarShared version: \(ClaudeBarShared_.shared.VERSION)")
+        print("ClaudeBarAppKmp initializing...")
 
-        // Create Swift implementations of KMP repository protocols
         let settingsRepository = SwiftProviderSettingsRepository()
         let credentialRepository = SwiftCredentialRepository()
+        let cliExecutor = SwiftCLIExecutor()
 
-        // Create QuotaMonitor using KMP factory
-        let kmpMonitor = ClaudeBarShared_.shared.createQuotaMonitor(
+        self.monitor = ClaudeBarShared_.shared.createQuotaMonitor(
             settingsRepository: settingsRepository,
             credentialRepository: credentialRepository,
+            cliExecutor: cliExecutor,
             alerter: nil
         )
-        self.monitor = kmpMonitor
-        print("Created QuotaMonitor with \(kmpMonitor.allProviders.count) providers")
-
-        // Create bridge for SwiftUI
-        self.bridge = KmpBridge(monitor: kmpMonitor)
-
-        print("ClaudeBarAppKmp initialization complete")
+        print("Created QuotaMonitor with \(monitor.allProviders.count) providers")
     }
-
-    @State private var settings = AppSettings.shared
 
     private var currentThemeMode: ThemeMode {
         ThemeMode(rawValue: settings.themeMode) ?? .system
@@ -65,18 +55,15 @@ struct ClaudeBarAppKmp: App {
     var body: some Scene {
         MenuBarExtra {
             #if ENABLE_SPARKLE
-            KmpMenuContentView(bridge: bridge)
+            KmpMenuContentView(monitor: monitor)
                 .themeProvider(currentThemeMode)
                 .environment(\.sparkleUpdater, sparkleUpdater)
             #else
-            KmpMenuContentView(bridge: bridge)
+            KmpMenuContentView(monitor: monitor)
                 .themeProvider(currentThemeMode)
             #endif
         } label: {
-            KmpStatusBarIcon(
-                status: bridge.overallStatus,
-                isChristmas: currentThemeMode == .christmas
-            )
+            KmpStatusBarIcon(status: overallStatus, isChristmas: currentThemeMode == .christmas)
         }
         .menuBarExtraStyle(.window)
     }
@@ -124,77 +111,36 @@ final class SwiftCredentialRepository: KmpCredentialRepository {
     }
 }
 
-// MARK: - KMP Bridge for SwiftUI
+/// Swift implementation of CLIExecutor using async/await (SKIE compatible)
+final class SwiftCLIExecutor: NSObject, KmpCLIExecutor {
+    private let executor = DefaultCLIExecutor()
 
-/// Bridges KMP QuotaMonitor to SwiftUI @Observable
-@MainActor
-@Observable
-final class KmpBridge {
-    private let monitor: KmpQuotaMonitor
-
-    var overallStatus: KmpQuotaStatus
-    var selectedProviderId: String = "claude"
-    var isRefreshing: Bool = false
-
-    init(monitor: KmpQuotaMonitor) {
-        self.monitor = monitor
-        self.overallStatus = monitor.overallStatus
-
-        // Start initial refresh
-        Task {
-            await refresh()
-        }
+    func locate(binary: String) -> String? {
+        executor.locate(binary)
     }
 
-    var allProviders: [KmpAIProvider] {
-        Array(monitor.allProviders)
-    }
-
-    var enabledProviders: [KmpAIProvider] {
-        Array(monitor.enabledProviders)
-    }
-
-    var selectedProvider: KmpAIProvider? {
-        monitor.provider(id: selectedProviderId)
-    }
-
-    var selectedProviderStatus: KmpQuotaStatus {
-        selectedProvider?.snapshot.value?.overallStatus ?? .healthy
-    }
-
-    var isSelectedProviderSyncing: Bool {
-        selectedProvider?.isSyncing.value.boolValue ?? false
-    }
-
-    func refresh() async {
-        isRefreshing = true
-        defer { isRefreshing = false }
-
-        do {
-            try await monitor.__refreshAll()
-        } catch {
-            print("Refresh failed: \(error)")
-        }
-
-        overallStatus = monitor.overallStatus
-    }
-
-    func refresh(providerId: String) async {
-        do {
-            try await monitor.__refresh(providerId: providerId)
-        } catch {
-            print("Refresh provider \(providerId) failed: \(error)")
-        }
-        overallStatus = monitor.overallStatus
-    }
-
-    func selectProvider(id: String) {
-        monitor.selectProvider(id: id)
-        selectedProviderId = id
-    }
-
-    func setProviderEnabled(id: String, enabled: Bool) {
-        monitor.setProviderEnabled(id: id, enabled: enabled)
+    // SKIE: Override __execute with async throws
+    func __execute(
+        binary: String,
+        args: [String],
+        input: String?,
+        timeout: Int64,
+        workingDirectory: String?,
+        autoResponses: [String: String]
+    ) async throws -> ClaudeBarShared.CLIResult {
+        let (output, exitCode) = try await Task.detached { [executor] in
+                 let result = try executor.execute(
+                     binary: binary,
+                     args: args,
+                     input: input,
+                     timeout: max(10.0, Double(timeout) / 1_000_000_000.0),
+                     workingDirectory: workingDirectory.map { URL(fileURLWithPath: $0) },
+                     autoResponses: autoResponses
+                 )
+                 return (result.output, Int32(result.exitCode))
+             }.value
+             return ClaudeBarShared.CLIResult(output: output, exitCode: exitCode)
+      
     }
 }
 
@@ -253,17 +199,30 @@ struct KmpStatusBarIcon: View {
     }
 }
 
-/// Menu content view using same design as MenuContentView
+/// Menu content view using QuotaMonitor directly with SKIE StateFlow
 struct KmpMenuContentView: View {
-    @Bindable var bridge: KmpBridge
+    let monitor: KmpQuotaMonitor
 
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.isChristmasTheme) private var isChristmas
     #if ENABLE_SPARKLE
     @Environment(\.sparkleUpdater) private var sparkleUpdater
     #endif
+
+    // Local state - updated via StateFlow observation
+    @State private var selectedProviderId: String = "claude"
+    @State private var snapshot: KmpUsageSnapshot?
+    @State private var isSyncing: Bool = false
     @State private var animateIn = false
     @State private var showSettings = false
+
+    private var selectedProvider: KmpAIProvider? {
+        monitor.provider(id: selectedProviderId)
+    }
+
+    private var selectedProviderStatus: KmpQuotaStatus {
+        snapshot?.overallStatus ?? .healthy
+    }
 
     var body: some View {
         ZStack {
@@ -285,25 +244,21 @@ struct KmpMenuContentView: View {
 
             // Main Content
             VStack(spacing: 0) {
-                // Header
                 headerView
                     .padding(.horizontal, 16)
                     .padding(.top, 16)
                     .padding(.bottom, 12)
 
-                // Provider Pills
                 providerPills
                     .padding(.horizontal, 16)
                     .padding(.bottom, 16)
 
-                // Metrics Content
                 VStack(spacing: 12) {
                     metricsContent
                 }
                 .padding(.horizontal, 16)
                 .padding(.bottom, 16)
 
-                // Action Bar
                 actionBar
                     .padding(.horizontal, 16)
                     .padding(.bottom, 12)
@@ -316,12 +271,30 @@ struct KmpMenuContentView: View {
             withAnimation(.easeOut(duration: 0.6)) {
                 animateIn = true
             }
-            await bridge.refresh(providerId: bridge.selectedProviderId)
+            await refreshSelectedProvider()
         }
-        .onChange(of: bridge.selectedProviderId) { _, newId in
-            Task {
-                await bridge.refresh(providerId: newId)
+        .task(id: selectedProviderId) {
+            // Observe snapshot StateFlow for selected provider
+            guard let provider = selectedProvider else { return }
+            for await newSnapshot in provider.snapshot {
+                self.snapshot = newSnapshot
             }
+        }
+        .task(id: selectedProviderId) {
+            // Observe syncing StateFlow
+            guard let provider = selectedProvider else { return }
+            for await syncing in provider.isSyncing {
+                self.isSyncing = syncing.boolValue
+            }
+        }
+    }
+
+    private func refreshSelectedProvider() async {
+        isSyncing = true
+        do {
+            try await monitor.__refresh(providerId: selectedProviderId)
+        } catch {
+            print("Refresh failed: \(error)")
         }
     }
 
@@ -371,7 +344,7 @@ struct KmpMenuContentView: View {
         HStack(spacing: 12) {
             // Provider Icon
             ZStack {
-                ProviderIconView(providerId: bridge.selectedProviderId, size: 38)
+                ProviderIconView(providerId: selectedProviderId, size: 38)
 
                 if isChristmas {
                     Image(systemName: "sparkle")
@@ -380,7 +353,7 @@ struct KmpMenuContentView: View {
                         .offset(x: 14, y: -14)
                 }
             }
-            .animation(.spring(response: 0.4, dampingFraction: 0.7), value: bridge.selectedProviderId)
+            .animation(.spring(response: 0.4, dampingFraction: 0.7), value: selectedProviderId)
 
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 4) {
@@ -419,8 +392,8 @@ struct KmpMenuContentView: View {
     private var statusBadge: some View {
         HStack(spacing: 6) {
             PulsingStatusDot(
-                color: bridge.selectedProviderStatus.themeColor(for: colorScheme),
-                isSyncing: bridge.isSelectedProviderSyncing
+                color: selectedProviderStatus.themeColor(for: colorScheme),
+                isSyncing: isSyncing
             )
 
             Text(statusText)
@@ -431,13 +404,13 @@ struct KmpMenuContentView: View {
         .padding(.vertical, 6)
         .background(
             Capsule()
-                .fill(bridge.selectedProviderStatus.themeColor(for: colorScheme).opacity(isChristmas ? 0.3 : (colorScheme == .dark ? 0.25 : 0.15)))
+                .fill(selectedProviderStatus.themeColor(for: colorScheme).opacity(isChristmas ? 0.3 : (colorScheme == .dark ? 0.25 : 0.15)))
                 .overlay(
                     Capsule()
                         .stroke(
                             isChristmas
                                 ? AppTheme.christmasGold.opacity(0.5)
-                                : bridge.selectedProviderStatus.themeColor(for: colorScheme).opacity(colorScheme == .dark ? 0.5 : 0.3),
+                                : selectedProviderStatus.themeColor(for: colorScheme).opacity(colorScheme == .dark ? 0.5 : 0.3),
                             lineWidth: 1
                         )
                 )
@@ -445,8 +418,8 @@ struct KmpMenuContentView: View {
     }
 
     private var statusText: String {
-        if bridge.isSelectedProviderSyncing { return "Syncing..." }
-        return bridge.selectedProviderStatus.badgeText
+        if isSyncing { return "Syncing..." }
+        return selectedProviderStatus.badgeText
     }
 
     // MARK: - Provider Pills
@@ -454,15 +427,15 @@ struct KmpMenuContentView: View {
     private var providerPills: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 6) {
-                ForEach(bridge.enabledProviders, id: \.id) { provider in
+                ForEach(Array(monitor.enabledProviders), id: \.id) { provider in
                     ProviderPill(
                         providerId: provider.id,
                         providerName: provider.name,
-                        isSelected: provider.id == bridge.selectedProviderId,
+                        isSelected: provider.id == selectedProviderId,
                         hasData: provider.snapshot.value != nil
                     ) {
                         withAnimation(.spring(response: 0.35, dampingFraction: 0.7)) {
-                            bridge.selectProvider(id: provider.id)
+                            selectedProviderId = provider.id
                         }
                     }
                 }
@@ -477,14 +450,14 @@ struct KmpMenuContentView: View {
 
     @ViewBuilder
     private var metricsContent: some View {
-        if let provider = bridge.selectedProvider, let snapshot = provider.snapshot.value {
+        if let provider = selectedProvider, let snapshot = provider.snapshot.value {
             VStack(spacing: 12) {
                 // Stats Grid
                 kmpStatsGrid(snapshot: snapshot)
             }
             .opacity(animateIn ? 1 : 0)
             .animation(.easeOut(duration: 0.5).delay(0.2), value: animateIn)
-        } else if bridge.isSelectedProviderSyncing {
+        } else if isSyncing {
             LoadingSpinnerView()
         } else {
             kmpEmptyState
@@ -523,7 +496,7 @@ struct KmpMenuContentView: View {
                     .foregroundStyle(AppTheme.statusWarning(for: colorScheme))
             }
 
-            Text("\(bridge.selectedProvider?.name ?? bridge.selectedProviderId) Unavailable")
+            Text("\(selectedProvider?.name ?? selectedProviderId) Unavailable")
                 .font(AppTheme.titleFont(size: 14))
                 .foregroundStyle(AppTheme.textPrimary(for: colorScheme))
 
@@ -544,10 +517,10 @@ struct KmpMenuContentView: View {
             WrappedActionButton(
                 icon: "safari.fill",
                 label: "Dashboard",
-                gradient: isChristmas ? AppTheme.christmasAccentGradient : AppTheme.providerGradient(for: bridge.selectedProviderId, scheme: colorScheme),
+                gradient: isChristmas ? AppTheme.christmasAccentGradient : AppTheme.providerGradient(for: selectedProviderId, scheme: colorScheme),
                 isChristmas: isChristmas
             ) {
-                if let urlString = bridge.selectedProvider?.dashboardURL,
+                if let urlString = selectedProvider?.dashboardURL,
                    let url = URL(string: urlString) {
                     NSWorkspace.shared.open(url)
                 }
@@ -555,13 +528,13 @@ struct KmpMenuContentView: View {
 
             // Refresh Button
             WrappedActionButton(
-                icon: bridge.isSelectedProviderSyncing ? "arrow.trianglehead.2.counterclockwise.rotate.90" : "arrow.clockwise",
-                label: bridge.isSelectedProviderSyncing ? "Syncing" : "Refresh",
+                icon: isSyncing ? "arrow.trianglehead.2.counterclockwise.rotate.90" : "arrow.clockwise",
+                label: isSyncing ? "Syncing" : "Refresh",
                 gradient: isChristmas ? AppTheme.christmasGreenGradient : AppTheme.accentGradient(for: colorScheme),
-                isLoading: bridge.isSelectedProviderSyncing,
+                isLoading: isSyncing,
                 isChristmas: isChristmas
             ) {
-                Task { await bridge.refresh() }
+                Task { await refreshSelectedProvider() }
             }
 
             Spacer()
