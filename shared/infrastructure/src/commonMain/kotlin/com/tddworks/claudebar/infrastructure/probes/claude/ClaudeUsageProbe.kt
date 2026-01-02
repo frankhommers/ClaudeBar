@@ -47,6 +47,9 @@ class ClaudeUsageProbe(
             )
         )
 
+        // Log output like Swift version
+        println("[ClaudeUsageProbe] Claude /usage output:\n${result.output}")
+
         if (result.exitCode != 0 && result.output.isBlank()) {
             throw ProbeError.ExecutionFailed("Claude CLI failed with exit code ${result.exitCode}")
         }
