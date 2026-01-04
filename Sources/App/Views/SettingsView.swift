@@ -25,6 +25,9 @@ struct SettingsContentView: View {
     // Budget input state
     @State private var budgetInput: String = ""
 
+    // Z.ai config path state
+    @State private var zaiConfigPathInput: String = ""
+
     /// The Copilot provider from the monitor (cast to CopilotProvider for credential access)
     private var copilotProvider: CopilotProvider? {
         monitor.provider(for: "copilot") as? CopilotProvider
@@ -68,6 +71,7 @@ struct SettingsContentView: View {
                     providersCard
                     claudeBudgetCard
                     copilotCard
+                    zaiConfigCard
                     #if ENABLE_SPARKLE
                     updatesCard
                     #endif
@@ -83,11 +87,13 @@ struct SettingsContentView: View {
                 .padding(.bottom, 12)
         }
         .frame(maxHeight: maxSettingsHeight)
-        .onAppear {
+                .onAppear {
             // Initialize budget input with current value
             if settings.claudeApiBudget > 0 {
                 budgetInput = String(describing: settings.claudeApiBudget)
             }
+            // Initialize Z.ai config path
+            zaiConfigPathInput = settings.zaiConfigPath
         }
     }
 
@@ -662,6 +668,99 @@ struct SettingsContentView: View {
                 .buttonStyle(.plain)
             }
         }
+    }
+
+    // MARK: - Z.ai Config Card
+
+    private var zaiConfigCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            // Header
+            HStack(spacing: 10) {
+                ZStack {
+                    Circle()
+                        .fill(
+                            LinearGradient(
+                                colors: [
+                                    Color(red: 0.2, green: 0.6, blue: 0.9),
+                                    Color(red: 0.15, green: 0.45, blue: 0.8)
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .frame(width: 32, height: 32)
+
+                    Image(systemName: "gearshape.fill")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(.white)
+                }
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Z.ai Configuration")
+                        .font(AppTheme.titleFont(size: 14))
+                        .foregroundStyle(isChristmas ? AppTheme.christmasTextPrimary : AppTheme.textPrimary(for: colorScheme))
+
+                    Text("Custom settings path for Z.ai")
+                        .font(AppTheme.captionFont(size: 10))
+                        .foregroundStyle(isChristmas ? AppTheme.christmasTextTertiary : AppTheme.textTertiary(for: colorScheme))
+                }
+
+                Spacer()
+            }
+
+            // Config Path Input
+            VStack(alignment: .leading, spacing: 6) {
+                Text("SETTINGS.JSON PATH")
+                    .font(AppTheme.captionFont(size: 9))
+                    .foregroundStyle(AppTheme.textSecondary(for: colorScheme))
+                    .tracking(0.5)
+
+                TextField("", text: $zaiConfigPathInput, prompt: Text("~/.claude/settings.json").foregroundStyle(AppTheme.textTertiary(for: colorScheme)))
+                    .font(AppTheme.bodyFont(size: 12))
+                    .foregroundStyle(AppTheme.textPrimary(for: colorScheme))
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 8)
+                    .background(
+                        RoundedRectangle(cornerRadius: 8)
+                            .fill(colorScheme == .dark ? Color.white.opacity(0.1) : Color.white.opacity(0.8))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 8)
+                                    .stroke(AppTheme.glassBorder(for: colorScheme), lineWidth: 1)
+                            )
+                    )
+                    .onChange(of: zaiConfigPathInput) { _, newValue in
+                        settings.zaiConfigPath = newValue
+                    }
+            }
+
+            // Help text
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Leave empty to use default path (~/.claude/settings.json)")
+                    .font(AppTheme.captionFont(size: 9))
+                    .foregroundStyle(AppTheme.textTertiary(for: colorScheme))
+            }
+        }
+        .padding(14)
+        .background(
+            RoundedRectangle(cornerRadius: 14)
+                .fill(isChristmas ? AppTheme.christmasCardGradient : AppTheme.cardGradient(for: colorScheme))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14)
+                        .stroke(
+                            LinearGradient(
+                                colors: isChristmas
+                                    ? [AppTheme.christmasGold.opacity(0.4), AppTheme.christmasGold.opacity(0.2)]
+                                    : [
+                                        colorScheme == .dark ? Color.white.opacity(0.25) : AppTheme.purpleVibrant(for: colorScheme).opacity(0.18),
+                                        colorScheme == .dark ? Color.white.opacity(0.08) : AppTheme.pinkHot(for: colorScheme).opacity(0.08)
+                                    ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ),
+                            lineWidth: 1
+                        )
+                )
+        )
     }
 
     // MARK: - Updates Card

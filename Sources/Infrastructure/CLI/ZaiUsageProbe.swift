@@ -18,7 +18,7 @@ public struct ZaiUsageProbe: UsageProbe {
     private let timeout: TimeInterval
 
     // Claude config file location
-    private static let claudeConfigPath = URL(fileURLWithPath: NSHomeDirectory())
+    private static let defaultConfigPath = URL(fileURLWithPath: NSHomeDirectory())
         .appendingPathComponent(".claude")
         .appendingPathComponent("settings.json")
 
@@ -145,10 +145,21 @@ public struct ZaiUsageProbe: UsageProbe {
     // MARK: - Configuration Reading
 
     private func readClaudeConfig() async throws -> String {
+        // Use custom path if set, otherwise use default
+        let customPath = UserDefaults.standard.string(forKey: "zaiConfigPath")
+        let configPath: URL
+        if let customPath = customPath, !customPath.isEmpty {
+            configPath = URL(fileURLWithPath: customPath)
+            AppLog.probes.debug("Using custom Z.ai config path: \(customPath)")
+        } else {
+            configPath = Self.defaultConfigPath
+            AppLog.probes.debug("Using default Z.ai config path: \(configPath.path)")
+        }
+
         // Try reading the config file using cat command for consistency
         let result = try cliExecutor.execute(
             binary: "cat",
-            args: [Self.claudeConfigPath.path],
+            args: [configPath.path],
             input: nil,
             timeout: timeout,
             workingDirectory: nil,

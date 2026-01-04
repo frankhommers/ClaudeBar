@@ -56,6 +56,15 @@ public final class AppSettings {
         }
     }
 
+    // MARK: - Z.ai Settings
+
+    /// Custom path to Z.ai Claude settings.json (empty = use default ~/.claude/settings.json)
+    public var zaiConfigPath: String {
+        didSet {
+            UserDefaults.standard.set(zaiConfigPath, forKey: Keys.zaiConfigPath)
+        }
+    }
+
     // MARK: - Initialization
 
     private init() {
@@ -64,6 +73,7 @@ public final class AppSettings {
         self.claudeApiBudgetEnabled = UserDefaults.standard.bool(forKey: Keys.claudeApiBudgetEnabled)
         self.claudeApiBudget = Decimal(UserDefaults.standard.double(forKey: Keys.claudeApiBudget))
         self.receiveBetaUpdates = UserDefaults.standard.bool(forKey: Keys.receiveBetaUpdates)
+        self.zaiConfigPath = UserDefaults.standard.string(forKey: Keys.zaiConfigPath) ?? ""
 
         // Auto-enable Christmas theme during Dec 24-26 if user hasn't explicitly chosen
         applySeasonalTheme()
@@ -97,6 +107,20 @@ public final class AppSettings {
             }
         }
     }
+
+    // MARK: - Z.ai Config Path Helper
+
+    /// Returns the Z.ai config path to use (custom path or default)
+    public static func zaiConfigURL() -> URL {
+        let customPath = shared.zaiConfigPath
+        if !customPath.isEmpty {
+            return URL(fileURLWithPath: customPath)
+        }
+        // Default: ~/.claude/settings.json
+        return URL(fileURLWithPath: NSHomeDirectory())
+            .appendingPathComponent(".claude")
+            .appendingPathComponent("settings.json")
+    }
 }
 
 // MARK: - UserDefaults Keys
@@ -108,6 +132,7 @@ private extension AppSettings {
         static let claudeApiBudgetEnabled = "claudeApiBudgetEnabled"
         static let claudeApiBudget = "claudeApiBudget"
         static let receiveBetaUpdates = "receiveBetaUpdates"
+        static let zaiConfigPath = "zaiConfigPath"
     }
 }
 
