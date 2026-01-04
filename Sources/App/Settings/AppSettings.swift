@@ -72,6 +72,13 @@ public final class AppSettings {
         }
     }
 
+    /// Name of environment variable containing GitHub personal access token (alternative to direct token entry)
+    public var copilotAuthEnvVar: String {
+        didSet {
+            UserDefaults.standard.set(copilotAuthEnvVar, forKey: Keys.copilotAuthEnvVar)
+        }
+    }
+
     // MARK: - Initialization
 
     private init() {
@@ -82,6 +89,7 @@ public final class AppSettings {
         self.receiveBetaUpdates = UserDefaults.standard.bool(forKey: Keys.receiveBetaUpdates)
         self.zaiConfigPath = UserDefaults.standard.string(forKey: Keys.zaiConfigPath) ?? ""
         self.glmAuthEnvVar = UserDefaults.standard.string(forKey: Keys.glmAuthEnvVar) ?? ""
+        self.copilotAuthEnvVar = UserDefaults.standard.string(forKey: Keys.copilotAuthEnvVar) ?? ""
 
         // Auto-enable Christmas theme during Dec 24-26 if user hasn't explicitly chosen
         applySeasonalTheme()
@@ -142,6 +150,7 @@ private extension AppSettings {
         static let receiveBetaUpdates = "receiveBetaUpdates"
         static let zaiConfigPath = "zaiConfigPath"
         static let glmAuthEnvVar = "glmAuthEnvVar"
+        static let copilotAuthEnvVar = "copilotAuthEnvVar"
     }
 }
 

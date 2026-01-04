@@ -29,6 +29,11 @@ struct SettingsContentView: View {
     @State private var zaiConfigPathInput: String = ""
     @State private var glmAuthEnvVarInput: String = ""
 
+    // Copilot env var state
+    @State private var copilotAuthEnvVarInput: String = ""
+    @State private var isTestingCopilot = false
+    @State private var copilotTestResult: String?
+
     /// The Copilot provider from the monitor (cast to CopilotProvider for credential access)
     private var copilotProvider: CopilotProvider? {
         monitor.provider(for: "copilot") as? CopilotProvider
@@ -96,6 +101,8 @@ struct SettingsContentView: View {
             // Initialize Z.ai settings
             zaiConfigPathInput = settings.zaiConfigPath
             glmAuthEnvVarInput = settings.glmAuthEnvVar
+            // Initialize Copilot settings
+            copilotAuthEnvVarInput = settings.copilotAuthEnvVar
         }
     }
 
@@ -598,11 +605,13 @@ struct SettingsContentView: View {
                     }
                     .buttonStyle(.plain)
 
-                    // Save button
+                    // Save & Test button
                     Button {
-                        saveToken()
+                        Task {
+                            await testCopilotConnection()
+                        }
                     } label: {
-                        Text("Save")
+                        Text("Save & Test")
                             .font(AppTheme.bodyFont(size: 10))
                             .foregroundStyle(.white)
                             .padding(.horizontal, 12)
@@ -613,8 +622,8 @@ struct SettingsContentView: View {
                             )
                     }
                     .buttonStyle(.plain)
-                    .disabled(copilotTokenInput.isEmpty)
-                    .opacity(copilotTokenInput.isEmpty ? 0.5 : 1)
+                    .disabled(copilotTokenInput.isEmpty && copilotAuthEnvVarInput.isEmpty)
+                    .opacity((copilotTokenInput.isEmpty && copilotAuthEnvVarInput.isEmpty) ? 0.5 : 1)
                 }
 
                 // Status messages
@@ -635,6 +644,80 @@ struct SettingsContentView: View {
                     }
                     .foregroundStyle(AppTheme.statusHealthy(for: colorScheme))
                 }
+            }
+
+            // Environment Variable (Alternative)
+            VStack(alignment: .leading, spacing: 6) {
+                Text("AUTH TOKEN ENV VAR (ALTERNATIVE)")
+                    .font(AppTheme.captionFont(size: 9))
+                    .foregroundStyle(AppTheme.textSecondary(for: colorScheme))
+                    .tracking(0.5)
+
+                TextField("", text: $copilotAuthEnvVarInput, prompt: Text("GITHUB_TOKEN").foregroundStyle(AppTheme.textTertiary(for: colorScheme)))
+                    .font(AppTheme.bodyFont(size: 12))
+                    .foregroundStyle(AppTheme.textPrimary(for: colorScheme))
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 8)
+                    .background(
+                        RoundedRectangle(cornerRadius: 8)
+                            .fill(colorScheme == .dark ? Color.white.opacity(0.1) : Color.white.opacity(0.8))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 8)
+                                    .stroke(AppTheme.glassBorder(for: colorScheme), lineWidth: 1)
+                            )
+                    )
+                    .onChange(of: copilotAuthEnvVarInput) { _, newValue in
+                        settings.copilotAuthEnvVar = newValue
+                    }
+            }
+
+            // Explanatory text
+            VStack(alignment: .leading, spacing: 4) {
+                Text("TOKEN LOOKUP ORDER")
+                    .font(AppTheme.captionFont(size: 9))
+                    .foregroundStyle(AppTheme.textSecondary(for: colorScheme))
+                    .tracking(0.5)
+
+                Text("1. First checks environment variable if specified")
+                    .font(AppTheme.captionFont(size: 10))
+                    .foregroundStyle(AppTheme.textTertiary(for: colorScheme))
+                Text("2. Falls back to direct token entry above")
+                    .font(AppTheme.captionFont(size: 10))
+                    .foregroundStyle(AppTheme.textTertiary(for: colorScheme))
+            }
+
+            // Save & Test button
+            if isTestingCopilot {
+                HStack {
+                    ProgressView()
+                        .scaleEffect(0.7)
+                    Text("Testing connection...")
+                        .font(AppTheme.bodyFont(size: 11))
+                        .foregroundStyle(AppTheme.textSecondary(for: colorScheme))
+                }
+            } else {
+                Button {
+                    Task {
+                        await testCopilotConnection()
+                    }
+                } label: {
+                    Text("Save & Test Connection")
+                        .font(AppTheme.bodyFont(size: 11))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(
+                            RoundedRectangle(cornerRadius: 6)
+                                .fill(AppTheme.purpleVibrant(for: colorScheme))
+                        )
+                }
+                .buttonStyle(.plain)
+            }
+
+            if let result = copilotTestResult {
+                Text(result)
+                    .font(AppTheme.captionFont(size: 9))
+                    .foregroundStyle(result.contains("Success") ? AppTheme.statusHealthy(for: colorScheme) : AppTheme.statusCritical(for: colorScheme))
             }
 
             // Help text and link
@@ -1146,6 +1229,34 @@ struct SettingsContentView: View {
     private func deleteToken() {
         copilotProvider?.deleteCredentials()
         saveError = nil
+    }
+
+    private func testCopilotConnection() async {
+        isTestingCopilot = true
+        copilotTestResult = nil
+
+        // Save current inputs
+        settings.copilotAuthEnvVar = copilotAuthEnvVarInput
+        if !copilotTokenInput.isEmpty {
+            copilotProvider?.saveToken(copilotTokenInput)
+            copilotTokenInput = ""
+        }
+
+        do {
+            // Try to refresh the copilot provider
+            await monitor.refresh(providerId: "copilot")
+
+            // Check if there's an error after refresh
+            if let error = monitor.provider(for: "copilot")?.lastError {
+                copilotTestResult = "Failed: \(error.localizedDescription)"
+            } else {
+                copilotTestResult = "Success: Connection verified"
+            }
+        } catch {
+            copilotTestResult = "Failed: \(error.localizedDescription)"
+        }
+
+        isTestingCopilot = false
     }
 }
 
