@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-01-05
+
+### Added
+- **Pluggable Theme System**: ClaudeBar now supports multiple visual themes with a protocol-based architecture. Switch themes instantly from Settings to match your workflow and preferences.
+- **CLI Terminal Theme**: New monochrome, terminal-inspired theme for developers who prefer a classic command-line aesthetic. Features monospace fonts, green accents, and a retro terminal look.
+- **Theme-Specific Menu Bar Icons**: Each theme can display its own custom menu bar icon, providing a cohesive visual experience across the entire app.
+
+### Improved
+- **Enhanced Christmas Theme**: Refreshed festive color palette with improved reds, greens, and golds. Updated gradients and glass effects for a more polished holiday feel.
+- **Smoother UI**: Refined corner radius on cards and pills for a more consistent visual appearance across all themes.
+- **Menu Width**: Adjusted menu content width for better readability.
+
+### Fixed
+- **Menu Bar Status Display**: The menu bar icon now correctly reflects the selected provider's status instead of showing incorrect state.
+
+### Technical
+- Introduced `AppThemeProvider` protocol for pluggable theme architecture
+- Added `ThemeRegistry` for runtime theme management and discovery
+- Created SwiftUI environment integration with `@Environment(\.appTheme)` support
+- Implemented built-in themes: Dark, Light, CLI, Christmas, and System (auto-switching)
+- Added `statusBarIconName` property to themes for custom menu bar icons
+- Moved theme colors to static properties within theme structs for better encapsulation
+- Added comprehensive theme system design documentation
+
 ## [0.2.15] - 2026-01-05
 
 ### Added
@@ -233,7 +257,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Menu bar interface with quota display
 - Automatic refresh every 5 minutes
 
-[Unreleased]: https://github.com/tddworks/ClaudeBar/compare/v0.2.15...HEAD
+[Unreleased]: https://github.com/tddworks/ClaudeBar/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/tddworks/ClaudeBar/compare/v0.2.15...v0.3.0
 [0.2.15]: https://github.com/tddworks/ClaudeBar/compare/v0.2.14...v0.2.15
 [0.2.14]: https://github.com/tddworks/ClaudeBar/compare/v0.2.13...v0.2.14
 [0.2.13]: https://github.com/tddworks/ClaudeBar/compare/v0.2.12...v0.2.13
