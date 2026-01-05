@@ -243,6 +243,12 @@ public final class ClaudeUsageProbe: UsageProbe, @unchecked Sendable {
         let organization = extractOrganization(text: clean)
         let loginMethod = extractLoginMethod(text: clean)
 
+        // API Usage Billing accounts don't have quota data - fall back to /cost
+        if accountType == .claudeApi {
+            AppLog.probes.info("Detected API Usage Billing account, falling back to /cost")
+            throw ProbeError.subscriptionRequired
+        }
+
         // Extract percentages
         let sessionPct = extractPercent(labelSubstring: "Current session", text: clean)
         let weeklyPct = extractPercent(labelSubstring: "Current week (all models)", text: clean)
