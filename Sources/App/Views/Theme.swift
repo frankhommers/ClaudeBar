@@ -8,6 +8,7 @@ enum ThemeMode: String, CaseIterable {
     case light
     case dark
     case system
+    case cli
     case christmas
 
     var displayName: String {
@@ -15,6 +16,7 @@ enum ThemeMode: String, CaseIterable {
         case .light: "Light"
         case .dark: "Dark"
         case .system: "System"
+        case .cli: "CLI"
         case .christmas: "Christmas"
         }
     }
@@ -24,6 +26,7 @@ enum ThemeMode: String, CaseIterable {
         case .light: "sun.max.fill"
         case .dark: "moon.stars.fill"
         case .system: "circle.lefthalf.filled"
+        case .cli: "terminal.fill"
         case .christmas: "snowflake"
         }
     }
@@ -31,6 +34,11 @@ enum ThemeMode: String, CaseIterable {
     /// Whether this theme uses Christmas-specific colors
     var isChristmas: Bool {
         self == .christmas
+    }
+
+    /// Whether this theme uses CLI-specific colors
+    var isCLI: Bool {
+        self == .cli
     }
 }
 
@@ -44,6 +52,10 @@ private struct IsChristmasThemeKey: EnvironmentKey {
     static let defaultValue: Bool = false
 }
 
+private struct IsCLIThemeKey: EnvironmentKey {
+    static let defaultValue: Bool = false
+}
+
 extension EnvironmentValues {
     var activeTheme: ColorScheme {
         get { self[ActiveThemeKey.self] }
@@ -53,6 +65,11 @@ extension EnvironmentValues {
     var isChristmasTheme: Bool {
         get { self[IsChristmasThemeKey.self] }
         set { self[IsChristmasThemeKey.self] = newValue }
+    }
+
+    var isCLITheme: Bool {
+        get { self[IsCLIThemeKey.self] }
+        set { self[IsCLIThemeKey.self] = newValue }
     }
 }
 
@@ -234,6 +251,116 @@ enum AppTheme {
 
     /// Christmas text tertiary - muted
     static let christmasTextTertiary = christmasSnow.opacity(0.6)
+
+    // MARK: - CLI Theme Colors
+    // Design: Minimalistic monochrome terminal aesthetic
+    // Pure black background with classic terminal green/amber accents
+
+    /// CLI black - pure black background
+    static let cliBlack = Color(red: 0.0, green: 0.0, blue: 0.0)
+
+    /// CLI charcoal - slightly lighter for cards
+    static let cliCharcoal = Color(red: 0.08, green: 0.08, blue: 0.08)
+
+    /// CLI dark gray - for borders and subtle elements
+    static let cliDarkGray = Color(red: 0.15, green: 0.15, blue: 0.15)
+
+    /// CLI gray - muted text and secondary elements
+    static let cliGray = Color(red: 0.45, green: 0.45, blue: 0.45)
+
+    /// CLI green - classic terminal green (primary accent)
+    static let cliGreen = Color(red: 0.0, green: 0.85, blue: 0.35)
+
+    /// CLI green dim - dimmer green for less emphasis
+    static let cliGreenDim = Color(red: 0.0, green: 0.55, blue: 0.22)
+
+    /// CLI amber - warm amber for warnings and secondary highlights
+    static let cliAmber = Color(red: 0.95, green: 0.75, blue: 0.2)
+
+    /// CLI amber dim - dimmer amber
+    static let cliAmberDim = Color(red: 0.65, green: 0.50, blue: 0.12)
+
+    /// CLI red - terminal red for errors
+    static let cliRed = Color(red: 0.95, green: 0.25, blue: 0.25)
+
+    /// CLI white - bright white text
+    static let cliWhite = Color(red: 0.92, green: 0.92, blue: 0.92)
+
+    /// CLI white dim - dimmer white for secondary text
+    static let cliWhiteDim = Color(red: 0.65, green: 0.65, blue: 0.65)
+
+    // MARK: - CLI Gradients (Minimal - mostly flat)
+
+    /// CLI background - pure black, no gradient
+    static let cliBackgroundGradient = LinearGradient(
+        colors: [cliBlack, cliBlack],
+        startPoint: .topLeading,
+        endPoint: .bottomTrailing
+    )
+
+    /// CLI card gradient - very subtle dark gradient
+    static let cliCardGradient = LinearGradient(
+        colors: [
+            cliCharcoal,
+            cliCharcoal.opacity(0.95)
+        ],
+        startPoint: .topLeading,
+        endPoint: .bottomTrailing
+    )
+
+    /// CLI accent gradient - green with subtle variation
+    static let cliAccentGradient = LinearGradient(
+        colors: [cliGreen, cliGreenDim],
+        startPoint: .leading,
+        endPoint: .trailing
+    )
+
+    /// CLI pill gradient - very subtle
+    static let cliPillGradient = LinearGradient(
+        colors: [
+            cliGreen.opacity(0.25),
+            cliGreen.opacity(0.15)
+        ],
+        startPoint: .topLeading,
+        endPoint: .bottomTrailing
+    )
+
+    /// CLI share gradient - amber tones
+    static let cliShareGradient = LinearGradient(
+        colors: [cliAmber, cliAmberDim],
+        startPoint: .leading,
+        endPoint: .trailing
+    )
+
+    /// CLI glass background - very dark
+    static let cliGlassBackground = cliCharcoal
+
+    /// CLI glass border - subtle dark gray
+    static let cliGlassBorder = cliDarkGray
+
+    /// CLI glass highlight - very subtle
+    static let cliGlassHighlight = cliGray.opacity(0.3)
+
+    /// CLI text primary - bright white
+    static let cliTextPrimary = cliWhite
+
+    /// CLI text secondary - dimmer white
+    static let cliTextSecondary = cliWhiteDim
+
+    /// CLI text tertiary - muted gray
+    static let cliTextTertiary = cliGray
+
+    /// CLI status healthy - terminal green
+    static let cliStatusHealthy = cliGreen
+
+    /// CLI status warning - amber
+    static let cliStatusWarning = cliAmber
+
+    /// CLI status critical - red
+    static let cliStatusCritical = cliRed
+
+    /// CLI status depleted - dim red
+    static let cliStatusDepleted = Color(red: 0.65, green: 0.15, blue: 0.15)
 
     // MARK: - Legacy Static Colors (for backward compatibility)
 
@@ -940,7 +1067,8 @@ struct ThemeSwitcherButton: View {
         switch themeMode {
         case .light: themeMode = .dark
         case .dark: themeMode = .system
-        case .system: themeMode = .christmas
+        case .system: themeMode = .cli
+        case .cli: themeMode = .christmas
         case .christmas: themeMode = .light
         }
     }
@@ -957,6 +1085,7 @@ struct ThemeProvider: ViewModifier {
         case .light: .light
         case .dark: .dark
         case .system: systemColorScheme
+        case .cli: .dark  // CLI uses dark mode base
         case .christmas: .dark  // Christmas uses dark mode base
         }
     }
@@ -966,6 +1095,7 @@ struct ThemeProvider: ViewModifier {
             .environment(\.colorScheme, effectiveColorScheme)  // Override colorScheme directly!
             .environment(\.activeTheme, effectiveColorScheme)
             .environment(\.isChristmasTheme, themeMode.isChristmas)
+            .environment(\.isCLITheme, themeMode.isCLI)
     }
 }
 
@@ -1020,6 +1150,39 @@ struct ChristmasGlassCardStyle: ViewModifier {
 extension View {
     func christmasGlassCard(cornerRadius: CGFloat = 16, padding: CGFloat = 12) -> some View {
         modifier(ChristmasGlassCardStyle(cornerRadius: cornerRadius, padding: padding))
+    }
+}
+
+// MARK: - CLI Glass Card Modifier
+
+struct CLIGlassCardStyle: ViewModifier {
+    @Environment(\.isCLITheme) private var isCLI
+    var cornerRadius: CGFloat = 8  // Sharper corners for CLI aesthetic
+    var padding: CGFloat = 12
+
+    func body(content: Content) -> some View {
+        content
+            .padding(padding)
+            .background(
+                ZStack {
+                    // Base card layer - flat dark background
+                    RoundedRectangle(cornerRadius: cornerRadius)
+                        .fill(isCLI ? AppTheme.cliCardGradient : AppTheme.cardGradient)
+
+                    // Simple border - thin green line for CLI
+                    RoundedRectangle(cornerRadius: cornerRadius)
+                        .stroke(
+                            isCLI ? AppTheme.cliGlassBorder : AppTheme.glassBorder,
+                            lineWidth: 1
+                        )
+                }
+            )
+    }
+}
+
+extension View {
+    func cliGlassCard(cornerRadius: CGFloat = 8, padding: CGFloat = 12) -> some View {
+        modifier(CLIGlassCardStyle(cornerRadius: cornerRadius, padding: padding))
     }
 }
 

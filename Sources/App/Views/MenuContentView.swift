@@ -5,15 +5,17 @@ import Infrastructure
 import Sparkle
 #endif
 
-/// The main menu content view with adaptive light/dark/christmas theme support.
+/// The main menu content view with adaptive light/dark/cli/christmas theme support.
 /// Features purple-pink gradients, glassmorphism cards, and bold typography.
 /// Christmas theme adds festive colors, snowfall, and holiday orbs.
+/// CLI theme provides minimalistic monochrome terminal aesthetics.
 struct MenuContentView: View {
     let monitor: QuotaMonitor
     let quotaAlerter: QuotaAlerter
 
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.isChristmasTheme) private var isChristmas
+    @Environment(\.isCLITheme) private var isCLI
     #if ENABLE_SPARKLE
     @Environment(\.sparkleUpdater) private var sparkleUpdater
     #endif
@@ -37,14 +39,14 @@ struct MenuContentView: View {
 
     var body: some View {
         ZStack {
-            // Gradient background - Christmas or standard
-            (isChristmas ? AppTheme.christmasBackgroundGradient : AppTheme.backgroundGradient(for: colorScheme))
+            // Gradient background - CLI, Christmas, or standard
+            (isCLI ? AppTheme.cliBackgroundGradient : isChristmas ? AppTheme.christmasBackgroundGradient : AppTheme.backgroundGradient(for: colorScheme))
                 .ignoresSafeArea()
 
-            // Subtle animated orbs in background - Christmas or standard
+            // Subtle animated orbs in background - only for Christmas or standard (not CLI)
             if isChristmas {
                 ChristmasBackgroundOrbs()
-            } else {
+            } else if !isCLI {
                 backgroundOrbs
             }
 
@@ -189,8 +191,8 @@ struct MenuContentView: View {
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 4) {
                     Text("ClaudeBar")
-                        .font(AppTheme.titleFont(size: 18))
-                        .foregroundStyle(isChristmas ? AppTheme.christmasTextPrimary : AppTheme.textPrimary(for: colorScheme))
+                        .font(isCLI ? .system(size: 18, weight: .bold, design: .monospaced) : AppTheme.titleFont(size: 18))
+                        .foregroundStyle(isCLI ? AppTheme.cliTextPrimary : isChristmas ? AppTheme.christmasTextPrimary : AppTheme.textPrimary(for: colorScheme))
 
                     // Christmas gift icon - vibrant red
                     if isChristmas {
@@ -200,9 +202,9 @@ struct MenuContentView: View {
                     }
                 }
 
-                Text(isChristmas ? "Happy Holidays!" : "AI Usage Monitor")
-                    .font(AppTheme.captionFont(size: 11))
-                    .foregroundStyle(isChristmas ? AppTheme.christmasTextSecondary : AppTheme.textSecondary(for: colorScheme))
+                Text(isCLI ? "> usage monitor" : isChristmas ? "Happy Holidays!" : "AI Usage Monitor")
+                    .font(isCLI ? .system(size: 11, weight: .medium, design: .monospaced) : AppTheme.captionFont(size: 11))
+                    .foregroundStyle(isCLI ? AppTheme.cliGreen : isChristmas ? AppTheme.christmasTextSecondary : AppTheme.textSecondary(for: colorScheme))
             }
 
             Spacer()
@@ -225,32 +227,46 @@ struct MenuContentView: View {
     }
 
     private var statusBadge: some View {
-        HStack(spacing: 6) {
+        let statusColor = isCLI ? cliStatusColor : selectedProviderStatus.themeColor(for: colorScheme)
+
+        return HStack(spacing: 6) {
             // Animated pulse dot
             PulsingStatusDot(
-                color: selectedProviderStatus.themeColor(for: colorScheme),
+                color: statusColor,
                 isSyncing: isSelectedProviderSyncing
             )
 
             Text(statusText)
-                .font(AppTheme.captionFont(size: 11))
-                .foregroundStyle(isChristmas ? AppTheme.christmasTextPrimary : AppTheme.textPrimary(for: colorScheme))
+                .font(isCLI ? .system(size: 11, weight: .medium, design: .monospaced) : AppTheme.captionFont(size: 11))
+                .foregroundStyle(isCLI ? AppTheme.cliTextPrimary : isChristmas ? AppTheme.christmasTextPrimary : AppTheme.textPrimary(for: colorScheme))
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
         .background(
-            Capsule()
-                .fill(selectedProviderStatus.themeColor(for: colorScheme).opacity(isChristmas ? 0.3 : (colorScheme == .dark ? 0.25 : 0.15)))
+            RoundedRectangle(cornerRadius: isCLI ? 4 : 20)
+                .fill(isCLI ? AppTheme.cliCharcoal : statusColor.opacity(isChristmas ? 0.3 : (colorScheme == .dark ? 0.25 : 0.15)))
                 .overlay(
-                    Capsule()
+                    RoundedRectangle(cornerRadius: isCLI ? 4 : 20)
                         .stroke(
-                            isChristmas
-                                ? AppTheme.christmasGold.opacity(0.5)
-                                : selectedProviderStatus.themeColor(for: colorScheme).opacity(colorScheme == .dark ? 0.5 : 0.3),
+                            isCLI
+                                ? statusColor.opacity(0.6)
+                                : isChristmas
+                                    ? AppTheme.christmasGold.opacity(0.5)
+                                    : statusColor.opacity(colorScheme == .dark ? 0.5 : 0.3),
                             lineWidth: 1
                         )
                 )
         )
+    }
+
+    /// CLI-specific status color mapping
+    private var cliStatusColor: Color {
+        switch selectedProviderStatus {
+        case .healthy: return AppTheme.cliStatusHealthy
+        case .warning: return AppTheme.cliStatusWarning
+        case .critical: return AppTheme.cliStatusCritical
+        case .depleted: return AppTheme.cliStatusDepleted
+        }
     }
 
     private var statusText: String {
@@ -596,6 +612,7 @@ struct ProviderPill: View {
     let action: () -> Void
 
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.isCLITheme) private var isCLI
     @State private var isHovering = false
 
     var body: some View {
@@ -605,7 +622,7 @@ struct ProviderPill: View {
                     .font(.system(size: 10, weight: .semibold))
 
                 Text(providerName)
-                    .font(AppTheme.bodyFont(size: 11))
+                    .font(isCLI ? .system(size: 11, weight: .medium, design: .monospaced) : AppTheme.bodyFont(size: 11))
                     .lineLimit(1)
                     .fixedSize()
             }
@@ -615,15 +632,15 @@ struct ProviderPill: View {
             .background(
                 ZStack {
                     if isSelected {
-                        Capsule()
-                            .fill(AppTheme.providerGradient(for: providerId, scheme: colorScheme))
-                            .shadow(color: AppTheme.providerColor(for: providerId, scheme: colorScheme).opacity(colorScheme == .dark ? 0.4 : 0.25), radius: 6, y: 2)
+                        RoundedRectangle(cornerRadius: isCLI ? 4 : 20)
+                            .fill(isCLI ? AppTheme.cliAccentGradient : AppTheme.providerGradient(for: providerId, scheme: colorScheme))
+                            .shadow(color: isCLI ? AppTheme.cliGreen.opacity(0.3) : AppTheme.providerColor(for: providerId, scheme: colorScheme).opacity(colorScheme == .dark ? 0.4 : 0.25), radius: isCLI ? 4 : 6, y: 2)
                     } else {
-                        Capsule()
+                        RoundedRectangle(cornerRadius: isCLI ? 4 : 20)
                             .fill(pillBackgroundColor)
                     }
 
-                    Capsule()
+                    RoundedRectangle(cornerRadius: isCLI ? 4 : 20)
                         .stroke(pillBorderColor, lineWidth: 1)
                 }
             )
@@ -634,12 +651,15 @@ struct ProviderPill: View {
 
     private var pillForegroundColor: Color {
         if isSelected {
-            return .white
+            return isCLI ? AppTheme.cliBlack : .white
         }
-        return AppTheme.textPrimary(for: colorScheme)
+        return isCLI ? AppTheme.cliTextPrimary : AppTheme.textPrimary(for: colorScheme)
     }
 
     private var pillBackgroundColor: Color {
+        if isCLI {
+            return AppTheme.cliCharcoal.opacity(isHovering ? 1 : 0.8)
+        }
         if colorScheme == .dark {
             return Color.white.opacity(isHovering ? 0.18 : 0.12)
         } else {
@@ -648,6 +668,9 @@ struct ProviderPill: View {
     }
 
     private var pillBorderColor: Color {
+        if isCLI {
+            return isSelected ? AppTheme.cliGreen.opacity(0.6) : AppTheme.cliDarkGray
+        }
         if isSelected {
             return colorScheme == .dark ? Color.white.opacity(0.3) : Color.white.opacity(0.5)
         }
@@ -668,8 +691,21 @@ struct WrappedStatCard: View {
     let delay: Double
 
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.isCLITheme) private var isCLI
     @State private var isHovering = false
     @State private var animateProgress = false
+
+    private var statusColor: Color {
+        if isCLI {
+            switch quota.status {
+            case .healthy: return AppTheme.cliStatusHealthy
+            case .warning: return AppTheme.cliStatusWarning
+            case .critical: return AppTheme.cliStatusCritical
+            case .depleted: return AppTheme.cliStatusDepleted
+            }
+        }
+        return quota.status.themeColor(for: colorScheme)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -679,11 +715,11 @@ struct WrappedStatCard: View {
                 HStack(spacing: 5) {
                     Image(systemName: iconName)
                         .font(.system(size: 9, weight: .bold))
-                        .foregroundStyle(quota.status.themeColor(for: colorScheme))
+                        .foregroundStyle(statusColor)
 
                     Text(quota.quotaType.displayName.uppercased())
-                        .font(AppTheme.captionFont(size: 8))
-                        .foregroundStyle(AppTheme.textSecondary(for: colorScheme))
+                        .font(isCLI ? .system(size: 8, weight: .medium, design: .monospaced) : AppTheme.captionFont(size: 8))
+                        .foregroundStyle(isCLI ? AppTheme.cliTextSecondary : AppTheme.textSecondary(for: colorScheme))
                         .tracking(0.3)
                 }
 
@@ -691,31 +727,31 @@ struct WrappedStatCard: View {
 
                 // Status badge - fixed size, won't wrap
                 Text(quota.status.badgeText)
-                    .badge(quota.status.themeColor(for: colorScheme))
+                    .badge(statusColor)
             }
 
             // Large percentage number
             HStack(alignment: .firstTextBaseline, spacing: 1) {
                 Text("\(Int(quota.percentRemaining))")
-                    .font(AppTheme.statFont(size: 32))
-                    .foregroundStyle(AppTheme.textPrimary(for: colorScheme))
+                    .font(isCLI ? .system(size: 32, weight: .bold, design: .monospaced) : AppTheme.statFont(size: 32))
+                    .foregroundStyle(isCLI ? AppTheme.cliTextPrimary : AppTheme.textPrimary(for: colorScheme))
                     .contentTransition(.numericText())
 
                 Text("%")
-                    .font(AppTheme.titleFont(size: 16))
-                    .foregroundStyle(AppTheme.textTertiary(for: colorScheme))
+                    .font(isCLI ? .system(size: 16, weight: .medium, design: .monospaced) : AppTheme.titleFont(size: 16))
+                    .foregroundStyle(isCLI ? AppTheme.cliTextTertiary : AppTheme.textTertiary(for: colorScheme))
             }
 
             // Progress bar with gradient
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
                     // Track
-                    RoundedRectangle(cornerRadius: 3)
+                    RoundedRectangle(cornerRadius: isCLI ? 2 : 3)
                         .fill(progressTrackColor)
 
                     // Fill
-                    RoundedRectangle(cornerRadius: 3)
-                        .fill(AppTheme.progressGradient(for: quota.percentRemaining, scheme: colorScheme))
+                    RoundedRectangle(cornerRadius: isCLI ? 2 : 3)
+                        .fill(isCLI ? cliProgressGradient : AppTheme.progressGradient(for: quota.percentRemaining, scheme: colorScheme))
                         .frame(width: animateProgress ? geo.size.width * quota.percentRemaining / 100 : 0)
                         .animation(.spring(response: 0.8, dampingFraction: 0.7).delay(delay + 0.2), value: animateProgress)
                 }
@@ -729,27 +765,27 @@ struct WrappedStatCard: View {
                         .font(.system(size: 7))
 
                     Text(resetText)
-                        .font(AppTheme.captionFont(size: 8))
+                        .font(isCLI ? .system(size: 8, weight: .medium, design: .monospaced) : AppTheme.captionFont(size: 8))
                 }
-                .foregroundStyle(AppTheme.textTertiary(for: colorScheme))
+                .foregroundStyle(isCLI ? AppTheme.cliTextTertiary : AppTheme.textTertiary(for: colorScheme))
                 .lineLimit(1)
             }
         }
         .padding(12)
         .background(
             ZStack {
-                RoundedRectangle(cornerRadius: 14)
-                    .fill(AppTheme.cardGradient(for: colorScheme))
+                RoundedRectangle(cornerRadius: isCLI ? 6 : 14)
+                    .fill(isCLI ? AppTheme.cliCardGradient : AppTheme.cardGradient(for: colorScheme))
 
-                // Light mode shadow
-                if colorScheme == .light {
+                // Light mode shadow (not for CLI)
+                if colorScheme == .light && !isCLI {
                     RoundedRectangle(cornerRadius: 14)
                         .fill(Color.clear)
                         .shadow(color: AppTheme.glassShadow(for: colorScheme), radius: 6, y: 3)
                 }
 
-                RoundedRectangle(cornerRadius: 14)
-                    .stroke(cardBorderGradient, lineWidth: 1)
+                RoundedRectangle(cornerRadius: isCLI ? 6 : 14)
+                    .stroke(isCLI ? LinearGradient(colors: [AppTheme.cliDarkGray], startPoint: .leading, endPoint: .trailing) : cardBorderGradient, lineWidth: 1)
             }
         )
         .scaleEffect(isHovering ? 1.015 : 1.0)
@@ -760,8 +796,20 @@ struct WrappedStatCard: View {
         }
     }
 
+    private var cliProgressGradient: LinearGradient {
+        let color: Color = switch quota.percentRemaining {
+        case 0..<20: AppTheme.cliStatusCritical
+        case 20..<50: AppTheme.cliStatusWarning
+        default: AppTheme.cliStatusHealthy
+        }
+        return LinearGradient(colors: [color, color.opacity(0.8)], startPoint: .leading, endPoint: .trailing)
+    }
+
     private var progressTrackColor: Color {
-        colorScheme == .dark
+        if isCLI {
+            return AppTheme.cliDarkGray
+        }
+        return colorScheme == .dark
             ? Color.white.opacity(0.15)
             : AppTheme.purpleDeep(for: colorScheme).opacity(0.1)
     }

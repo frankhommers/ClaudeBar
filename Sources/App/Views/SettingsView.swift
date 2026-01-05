@@ -104,6 +104,7 @@ struct SettingsContentView: View {
     // MARK: - Theme Card
 
     @Environment(\.isChristmasTheme) private var isChristmas
+    @Environment(\.isCLITheme) private var isCLI
 
     /// Convert ThemeMode to string for settings storage
     private var currentThemeMode: ThemeMode {
@@ -117,25 +118,27 @@ struct SettingsContentView: View {
                 ZStack {
                     Circle()
                         .fill(
-                            isChristmas
-                                ? AppTheme.christmasAccentGradient
-                                : AppTheme.accentGradient(for: colorScheme)
+                            isCLI
+                                ? AppTheme.cliAccentGradient
+                                : isChristmas
+                                    ? AppTheme.christmasAccentGradient
+                                    : AppTheme.accentGradient(for: colorScheme)
                         )
                         .frame(width: 32, height: 32)
 
                     Image(systemName: currentThemeMode.icon)
                         .font(.system(size: 12, weight: .bold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(isCLI ? AppTheme.cliBlack : .white)
                 }
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Appearance")
-                        .font(AppTheme.titleFont(size: 14))
-                        .foregroundStyle(isChristmas ? AppTheme.christmasTextPrimary : AppTheme.textPrimary(for: colorScheme))
+                        .font(isCLI ? .system(size: 14, weight: .bold, design: .monospaced) : AppTheme.titleFont(size: 14))
+                        .foregroundStyle(isCLI ? AppTheme.cliTextPrimary : isChristmas ? AppTheme.christmasTextPrimary : AppTheme.textPrimary(for: colorScheme))
 
                     Text("Choose your theme")
-                        .font(AppTheme.captionFont(size: 10))
-                        .foregroundStyle(isChristmas ? AppTheme.christmasTextTertiary : AppTheme.textTertiary(for: colorScheme))
+                        .font(isCLI ? .system(size: 10, weight: .medium, design: .monospaced) : AppTheme.captionFont(size: 10))
+                        .foregroundStyle(isCLI ? AppTheme.cliTextTertiary : isChristmas ? AppTheme.christmasTextTertiary : AppTheme.textTertiary(for: colorScheme))
                 }
 
                 Spacer()
@@ -150,7 +153,8 @@ struct SettingsContentView: View {
                     ThemeOptionButton(
                         mode: mode,
                         isSelected: currentThemeMode == mode,
-                        isChristmas: isChristmas
+                        isChristmas: isChristmas,
+                        isCLI: isCLI
                     ) {
                         withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
                             settings.themeMode = mode.rawValue
@@ -161,21 +165,23 @@ struct SettingsContentView: View {
         }
         .padding(14)
         .background(
-            RoundedRectangle(cornerRadius: 14)
-                .fill(isChristmas ? AppTheme.christmasCardGradient : AppTheme.cardGradient(for: colorScheme))
+            RoundedRectangle(cornerRadius: isCLI ? 8 : 14)
+                .fill(isCLI ? AppTheme.cliCardGradient : isChristmas ? AppTheme.christmasCardGradient : AppTheme.cardGradient(for: colorScheme))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 14)
+                    RoundedRectangle(cornerRadius: isCLI ? 8 : 14)
                         .stroke(
-                            LinearGradient(
-                                colors: isChristmas
-                                    ? [AppTheme.christmasGold.opacity(0.4), AppTheme.christmasGold.opacity(0.2)]
-                                    : [
-                                        colorScheme == .dark ? Color.white.opacity(0.25) : AppTheme.purpleVibrant(for: colorScheme).opacity(0.18),
-                                        colorScheme == .dark ? Color.white.opacity(0.08) : AppTheme.pinkHot(for: colorScheme).opacity(0.08)
-                                    ],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            ),
+                            isCLI
+                                ? LinearGradient(colors: [AppTheme.cliDarkGray, AppTheme.cliDarkGray], startPoint: .topLeading, endPoint: .bottomTrailing)
+                                : isChristmas
+                                    ? LinearGradient(colors: [AppTheme.christmasGold.opacity(0.4), AppTheme.christmasGold.opacity(0.2)], startPoint: .topLeading, endPoint: .bottomTrailing)
+                                    : LinearGradient(
+                                        colors: [
+                                            colorScheme == .dark ? Color.white.opacity(0.25) : AppTheme.purpleVibrant(for: colorScheme).opacity(0.18),
+                                            colorScheme == .dark ? Color.white.opacity(0.08) : AppTheme.pinkHot(for: colorScheme).opacity(0.08)
+                                        ],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    ),
                             lineWidth: 1
                         )
                 )
@@ -1243,15 +1249,24 @@ struct ThemeOptionButton: View {
     let mode: ThemeMode
     let isSelected: Bool
     let isChristmas: Bool
+    let isCLI: Bool
     let action: () -> Void
 
     @Environment(\.colorScheme) private var colorScheme
     @State private var isHovering = false
 
+    init(mode: ThemeMode, isSelected: Bool, isChristmas: Bool, isCLI: Bool = false, action: @escaping () -> Void) {
+        self.mode = mode
+        self.isSelected = isSelected
+        self.isChristmas = isChristmas
+        self.isCLI = isCLI
+        self.action = action
+    }
+
     var body: some View {
         Button(action: action) {
             HStack(spacing: 8) {
-                // Icon with festive styling for Christmas
+                // Icon with themed styling
                 ZStack {
                     Circle()
                         .fill(iconBackgroundGradient)
@@ -1259,18 +1274,22 @@ struct ThemeOptionButton: View {
 
                     Image(systemName: mode.icon)
                         .font(.system(size: 11, weight: .bold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(mode == .cli ? AppTheme.cliBlack : .white)
                 }
 
                 VStack(alignment: .leading, spacing: 1) {
                     Text(mode.displayName)
-                        .font(AppTheme.bodyFont(size: 11))
+                        .font(mode == .cli ? .system(size: 11, weight: .medium, design: .monospaced) : AppTheme.bodyFont(size: 11))
                         .foregroundStyle(textColor)
 
                     if mode == .christmas {
                         Text("Festive")
                             .font(AppTheme.captionFont(size: 8))
                             .foregroundStyle(AppTheme.christmasGold)
+                    } else if mode == .cli {
+                        Text("Terminal")
+                            .font(.system(size: 8, weight: .medium, design: .monospaced))
+                            .foregroundStyle(AppTheme.cliGreen)
                     }
                 }
 
@@ -1286,10 +1305,10 @@ struct ThemeOptionButton: View {
             .padding(.horizontal, 10)
             .padding(.vertical, 8)
             .background(
-                RoundedRectangle(cornerRadius: 10)
+                RoundedRectangle(cornerRadius: mode == .cli ? 6 : 10)
                     .fill(backgroundColor)
                     .overlay(
-                        RoundedRectangle(cornerRadius: 10)
+                        RoundedRectangle(cornerRadius: mode == .cli ? 6 : 10)
                             .stroke(borderColor, lineWidth: isSelected ? 2 : 1)
                     )
             )
@@ -1319,12 +1338,17 @@ struct ThemeOptionButton: View {
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
+        case .cli:
+            return AppTheme.cliAccentGradient
         case .christmas:
             return AppTheme.christmasAccentGradient
         }
     }
 
     private var textColor: Color {
+        if isCLI {
+            return AppTheme.cliTextPrimary
+        }
         if isChristmas {
             return AppTheme.christmasTextPrimary
         }
@@ -1332,6 +1356,9 @@ struct ThemeOptionButton: View {
     }
 
     private var checkmarkColor: Color {
+        if mode == .cli || isCLI {
+            return AppTheme.cliGreen
+        }
         if mode == .christmas || isChristmas {
             return AppTheme.christmasGold
         }
@@ -1340,12 +1367,18 @@ struct ThemeOptionButton: View {
 
     private var backgroundColor: Color {
         if isSelected {
+            if mode == .cli || isCLI {
+                return AppTheme.cliGreen.opacity(0.15)
+            }
             if mode == .christmas || isChristmas {
                 return AppTheme.christmasGold.opacity(0.15)
             }
             return AppTheme.purpleVibrant(for: colorScheme).opacity(0.15)
         }
         if isHovering {
+            if isCLI {
+                return AppTheme.cliCharcoal
+            }
             return AppTheme.glassBackground(for: colorScheme)
         }
         return Color.clear
@@ -1353,10 +1386,16 @@ struct ThemeOptionButton: View {
 
     private var borderColor: Color {
         if isSelected {
+            if mode == .cli || isCLI {
+                return AppTheme.cliGreen
+            }
             if mode == .christmas || isChristmas {
                 return AppTheme.christmasGold
             }
             return AppTheme.purpleVibrant(for: colorScheme)
+        }
+        if isCLI {
+            return AppTheme.cliDarkGray
         }
         return AppTheme.glassBorder(for: colorScheme).opacity(0.5)
     }
