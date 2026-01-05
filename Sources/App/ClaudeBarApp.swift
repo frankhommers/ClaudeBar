@@ -127,12 +127,6 @@ struct StatusBarIcon: View {
     }
 
     private var iconColor: Color {
-        if isChristmas {
-            return ChristmasTheme().accentPrimary
-        }
-        if isCLI {
-            return CLITheme().accentPrimary
-        }
         return status.displayColor
     }
 }
