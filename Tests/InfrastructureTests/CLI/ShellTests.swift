@@ -115,8 +115,6 @@ struct ShellTests {
 
     @Test
     func `nushell rejects table output as safety fallback`() {
-        // If somehow table output gets through (edge case with ^which), reject it
-        // This is a safety net since ^which should return plain path
         let tableOutput = """
         ╭───┬─────────┬─────────────────────────────────────────────────────┬──────────╮
         │ # │ command │                        path                         │   type   │
@@ -129,7 +127,6 @@ struct ShellTests {
 
     @Test
     func `nushell rejects partial table output`() {
-        // Even partial table characters should be rejected as safety
         #expect(Shell.nushell.parseWhichOutput("│ some output") == nil)
         #expect(Shell.nushell.parseWhichOutput("╭───") == nil)
         #expect(Shell.nushell.parseWhichOutput("╰───╯") == nil)

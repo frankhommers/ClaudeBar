@@ -5,27 +5,9 @@ import Foundation
 /// The user's login shell determines how commands like `which` and environment
 /// variable access work. This enum encapsulates shell-specific behavior so
 /// `BinaryLocator` can work correctly across different shells.
-///
-/// ## Adding a New Shell
-///
-/// 1. Add a new case to the enum
-/// 2. Update `detect(from:)` to recognize the shell name
-/// 3. Implement `whichArguments(for:)` with the correct syntax
-/// 4. Implement `pathArguments()` with the correct syntax
-/// 5. Update `parseWhichOutput(_:)` if the shell has non-standard output
-///
-/// ## Supported Shells
-///
-/// - **POSIX**: bash, zsh, sh, dash, and other POSIX-compatible shells
-/// - **Fish**: The fish shell (has some syntax differences but `which` works)
-/// - **Nushell**: Modern shell with structured data; `which` outputs tables
-///
 enum Shell: Sendable, Equatable {
-    /// POSIX-compatible shells: bash, zsh, sh, dash, etc.
     case posix
-    /// Fish shell - mostly POSIX-like for our purposes
     case fish
-    /// Nushell - structured data shell with different syntax
     case nushell
 
     // MARK: - Detection
@@ -43,7 +25,6 @@ enum Shell: Sendable, Equatable {
         case "fish":
             return .fish
         default:
-            // bash, zsh, sh, dash, ksh, etc. are all POSIX-compatible
             return .posix
         }
     }
@@ -63,11 +44,9 @@ enum Shell: Sendable, Equatable {
     func whichArguments(for tool: String) -> [String] {
         switch self {
         case .posix, .fish:
-            // Standard: which outputs plain path
             return ["-l", "-c", "which \(tool)"]
         case .nushell:
-            // Use ^which to call the external which binary, avoiding Nushell's built-in
-            // which returns a table and doesn't find external paths for shadowed commands
+            // ^which calls the external binary, avoiding Nushell's table-outputting built-in
             return ["-l", "-c", "^which \(tool)"]
         }
     }
@@ -78,10 +57,8 @@ enum Shell: Sendable, Equatable {
     func pathArguments() -> [String] {
         switch self {
         case .posix, .fish:
-            // Standard: $PATH is colon-separated string
             return ["-l", "-c", "echo $PATH"]
         case .nushell:
-            // Nushell: $env.PATH is a list, join with colons for compatibility
             return ["-l", "-c", "$env.PATH | str join ':'"]
         }
     }
@@ -98,12 +75,9 @@ enum Shell: Sendable, Equatable {
 
         switch self {
         case .posix, .fish:
-            // Simple path output, possibly with trailing newline
             return trimmed
-
         case .nushell:
-            // With `get path.0`, output should be clean path
-            // But if table output leaked through (edge case), reject it
+            // Reject table output that may have leaked through
             if trimmed.contains("│") || trimmed.contains("╭") || trimmed.contains("╰") {
                 return nil
             }

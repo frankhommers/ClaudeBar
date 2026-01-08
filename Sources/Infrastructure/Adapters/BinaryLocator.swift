@@ -30,7 +30,6 @@ public struct BinaryLocator: Sendable {
     ///
     /// Runs `which` through a login shell to access the user's full PATH,
     /// including paths from nix-darwin, Homebrew, and other package managers.
-    /// Automatically detects the shell type and uses appropriate syntax.
     ///
     /// - Parameter tool: The name of the CLI tool
     /// - Returns: The full path to the tool if found, nil otherwise
@@ -61,9 +60,6 @@ public struct BinaryLocator: Sendable {
     }
 
     /// Gets the user's PATH from their login shell.
-    ///
-    /// Automatically detects the shell type and uses appropriate syntax
-    /// to retrieve the PATH environment variable.
     ///
     /// - Returns: The full PATH string from the user's shell, or system PATH as fallback
     public static func shellPath() -> String {
