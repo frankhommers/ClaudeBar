@@ -181,9 +181,16 @@ public final class AWSBedrockPricingService: BedrockPricingService, @unchecked S
             return model.displayName
         }
 
+        // Normalize: strip regional prefix (us., eu., etc.) for cross-region inference
+        let normalizedId = modelId.replacingOccurrences(
+            of: "^(us|eu|ap|sa|ca|me|af)\\.",
+            with: "",
+            options: .regularExpression
+        )
+
         // Parse model ID format: provider.model-name-version:variant
         // e.g., "anthropic.claude-opus-4-5-20251101-v1:0"
-        let parts = modelId.split(separator: ".")
+        let parts = normalizedId.split(separator: ".")
         guard parts.count >= 2 else { return modelId }
 
         let modelPart = String(parts[1])
@@ -198,7 +205,14 @@ public final class AWSBedrockPricingService: BedrockPricingService, @unchecked S
     }
 
     private func extractVendor(from modelId: String) -> String {
-        let parts = modelId.split(separator: ".")
+        // Normalize: strip regional prefix (us., eu., etc.) for cross-region inference
+        let normalizedId = modelId.replacingOccurrences(
+            of: "^(us|eu|ap|sa|ca|me|af)\\.",
+            with: "",
+            options: .regularExpression
+        )
+
+        let parts = normalizedId.split(separator: ".")
         guard let vendor = parts.first else { return "Unknown" }
 
         switch vendor.lowercased() {
@@ -229,16 +243,30 @@ public enum DefaultBedrockPricing {
 
     /// Returns bundled pricing for known models, nil for unknown models
     public static func model(for modelId: String) -> BedrockModel? {
-        // Check exact match first
-        if let model = models[modelId] {
-            return model
+        // Normalize model ID: strip regional prefix (us., eu., ap., etc.) for cross-region inference
+        // CloudWatch returns "us.anthropic.claude-..." but pricing uses "anthropic.claude-..."
+        let normalizedId = modelId.replacingOccurrences(
+            of: "^(us|eu|ap|sa|ca|me|af)\\.",
+            with: "",
+            options: .regularExpression
+        )
+
+        // Check exact match first (with normalized ID)
+        if let model = models[normalizedId] {
+            return BedrockModel(
+                id: modelId, // Preserve original ID with regional prefix
+                displayName: model.displayName,
+                vendor: model.vendor,
+                inputPricePer1M: model.inputPricePer1M,
+                outputPricePer1M: model.outputPricePer1M
+            )
         }
 
         // Check partial match (without version suffix)
-        let baseModelId = modelId.replacingOccurrences(of: ":\\d+$", with: "", options: .regularExpression)
+        let baseModelId = normalizedId.replacingOccurrences(of: ":\\d+$", with: "", options: .regularExpression)
         if let model = models[baseModelId] {
             return BedrockModel(
-                id: modelId, // Use original ID
+                id: modelId, // Preserve original ID
                 displayName: model.displayName,
                 vendor: model.vendor,
                 inputPricePer1M: model.inputPricePer1M,
@@ -257,6 +285,13 @@ public enum DefaultBedrockPricing {
             vendor: "Anthropic",
             inputPricePer1M: 15.00,
             outputPricePer1M: 75.00
+        ),
+        "anthropic.claude-haiku-4-5-20251001-v1:0": BedrockModel(
+            id: "anthropic.claude-haiku-4-5-20251001-v1:0",
+            displayName: "Claude Haiku 4.5",
+            vendor: "Anthropic",
+            inputPricePer1M: 1.00,
+            outputPricePer1M: 5.00
         ),
         "anthropic.claude-sonnet-4-20250514-v1:0": BedrockModel(
             id: "anthropic.claude-sonnet-4-20250514-v1:0",

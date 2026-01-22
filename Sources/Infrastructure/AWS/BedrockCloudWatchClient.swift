@@ -1,5 +1,6 @@
 import Foundation
 import AWSCloudWatch
+import AWSSDKIdentity
 import Mockable
 import Domain
 
@@ -60,7 +61,7 @@ public final class AWSBedrockCloudWatchClient: BedrockCloudWatchClient, @uncheck
         endTime: Date
     ) async throws -> [BedrockMetricData] {
         // Build CloudWatch client for the specified region
-        let client = try buildClient(region: region)
+        let client = try await buildClient(region: region)
 
         // Get list of models by querying for Invocations metric with ModelId dimension
         let modelIds = try await listBedrockModels(client: client, startTime: startTime, endTime: endTime)
@@ -83,7 +84,7 @@ public final class AWSBedrockCloudWatchClient: BedrockCloudWatchClient, @uncheck
     public func verifyCredentials() async -> Bool {
         do {
             // Try to create a client and make a simple call
-            let client = try buildClient(region: "us-east-1")
+            let client = try await buildClient(region: "us-east-1")
             // List metrics is a cheap call to verify credentials work
             let input = ListMetricsInput(namespace: "AWS/Bedrock")
             _ = try await client.listMetrics(input: input)
@@ -96,10 +97,36 @@ public final class AWSBedrockCloudWatchClient: BedrockCloudWatchClient, @uncheck
 
     // MARK: - Private Helpers
 
-    private func buildClient(region: String) throws -> CloudWatchClient {
-        // Configure client with profile if specified
-        // AWS SDK will automatically read from ~/.aws/credentials
-        try CloudWatchClient(region: region)
+    private func buildClient(region: String) async throws -> CloudWatchClient {
+        // If profile name is specified, set AWS_PROFILE environment variable
+        // This is needed because when running from Xcode, env vars aren't inherited
+        if let profile = profileName, !profile.isEmpty {
+            setenv("AWS_PROFILE", profile, 1)
+            // Also ensure HOME is set for the SDK to find ~/.aws/
+            if getenv("HOME") == nil {
+                setenv("HOME", NSHomeDirectory(), 1)
+            }
+            AppLog.probes.debug("Using AWS profile: \(profile)")
+        }
+
+        // Try to create client with SSO-aware credential chain
+        do {
+            // Create configuration - the SDK's default chain should respect AWS_PROFILE
+            let config = try await CloudWatchClient.CloudWatchClientConfiguration(region: region)
+
+            // Use SSO credential resolver when a profile is specified
+            // The SSO resolver reads the profile's SSO configuration and uses cached tokens
+            if let profile = profileName, !profile.isEmpty {
+                AppLog.probes.debug("Creating SSOAWSCredentialIdentityResolver for profile: \(profile)")
+                let ssoResolver = try SSOAWSCredentialIdentityResolver(profileName: profile)
+                config.awsCredentialIdentityResolver = ssoResolver
+            }
+
+            return CloudWatchClient(config: config)
+        } catch {
+            AppLog.probes.error("Failed to create CloudWatch client: \(error)")
+            throw error
+        }
     }
 
     private func listBedrockModels(
@@ -107,13 +134,12 @@ public final class AWSBedrockCloudWatchClient: BedrockCloudWatchClient, @uncheck
         startTime: Date,
         endTime: Date
     ) async throws -> [String] {
-        // Query CloudWatch for all unique ModelId values in the time range
+        // Query CloudWatch for all unique ModelId values
+        // Use simple query without filters that might cause InvalidParameterValueException
+        AppLog.probes.debug("Listing Bedrock models from CloudWatch...")
+
         let input = ListMetricsInput(
-            dimensions: [
-                CloudWatchClientTypes.DimensionFilter(name: "ModelId")
-            ],
-            namespace: "AWS/Bedrock",
-            recentlyActive: .pt3h
+            namespace: "AWS/Bedrock"
         )
 
         var modelIds: Set<String> = []
@@ -124,6 +150,7 @@ public final class AWSBedrockCloudWatchClient: BedrockCloudWatchClient, @uncheck
             paginatedInput.nextToken = nextToken
 
             let output = try await client.listMetrics(input: paginatedInput)
+            AppLog.probes.debug("Got \(output.metrics?.count ?? 0) metrics from CloudWatch")
 
             for metric in output.metrics ?? [] {
                 if let dimensions = metric.dimensions {
@@ -138,6 +165,7 @@ public final class AWSBedrockCloudWatchClient: BedrockCloudWatchClient, @uncheck
             nextToken = output.nextToken
         } while nextToken != nil
 
+        AppLog.probes.debug("Found \(modelIds.count) unique models: \(Array(modelIds).joined(separator: ", "))")
         return Array(modelIds)
     }
 
@@ -148,7 +176,9 @@ public final class AWSBedrockCloudWatchClient: BedrockCloudWatchClient, @uncheck
         endTime: Date
     ) async throws -> BedrockMetricData {
         // Calculate period - we want a single data point for the entire range
-        let periodSeconds = Int(endTime.timeIntervalSince(startTime))
+        // CloudWatch requires period to be a multiple of 60 for periods >= 60 seconds
+        let rawPeriod = Int(endTime.timeIntervalSince(startTime))
+        let periodSeconds = max(60, ((rawPeriod + 59) / 60) * 60) // Round up to nearest 60
 
         let modelDimension = CloudWatchClientTypes.Dimension(name: "ModelId", value: modelId)
 
