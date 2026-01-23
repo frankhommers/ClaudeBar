@@ -165,6 +165,20 @@ struct ClaudeUsageProbeParsingTests {
     No, cancel (n)
     """
 
+    // New trust prompt format introduced in later Claude CLI versions
+    static let newTrustPromptOutput = """
+    Accessing workspace:
+
+    /Users/testuser/Library/Application Support/ClaudeBar/Probe
+
+    Quick safety check: Is this a project you created or one you trust? (Like your own code, a well-known open source project, or work from your team). If not, take a moment to review what's in this folder first.
+
+    Claude Code'll be able to read, edit, and execute files here.
+
+    ❯ 1. Yes, I trust this folder
+      2. No, exit
+    """
+
     static let authErrorOutput = """
     authentication_error: Your session has expired.
     Please run `claude login` to authenticate.
@@ -174,6 +188,17 @@ struct ClaudeUsageProbeParsingTests {
     func `detects folder trust prompt and throws error`() throws {
         // Given
         let output = Self.trustPromptOutput
+
+        // When & Then
+        #expect(throws: ProbeError.self) {
+            try simulateParse(text: output)
+        }
+    }
+
+    @Test
+    func `detects new folder trust prompt format and throws error`() throws {
+        // Given - New trust prompt format with "Is this a project you created or one you trust"
+        let output = Self.newTrustPromptOutput
 
         // When & Then
         #expect(throws: ProbeError.self) {

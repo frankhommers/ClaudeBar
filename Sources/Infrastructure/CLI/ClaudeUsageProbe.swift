@@ -56,6 +56,7 @@ public final class ClaudeUsageProbe: UsageProbe, @unchecked Sendable {
                     "Ready to code here?": "\r",
                     "Press Enter to continue": "\r",
                     "ctrl+t to disable": "\r",  // Onboarding complete
+                    "Yes, I trust this folder": "\r",  // New trust prompt format
                 ]
             )
         } catch {
@@ -112,6 +113,7 @@ public final class ClaudeUsageProbe: UsageProbe, @unchecked Sendable {
                     "Ready to code here?": "\r",
                     "Press Enter to continue": "\r",
                     "ctrl+t to disable": "\r",
+                    "Yes, I trust this folder": "\r",  // New trust prompt format
                 ]
             )
         } catch {
@@ -633,7 +635,9 @@ public final class ClaudeUsageProbe: UsageProbe, @unchecked Sendable {
     internal func extractUsageError(_ text: String) -> ProbeError? {
         let lower = text.lowercased()
 
-        if lower.contains("do you trust the files in this folder?"), !lower.contains("current session") {
+        if (lower.contains("do you trust the files in this folder?") ||
+            lower.contains("is this a project you created or one you trust")),
+           !lower.contains("current session") {
             AppLog.probes.error("Claude probe blocked: folder trust required")
             return .folderTrustRequired
         }
