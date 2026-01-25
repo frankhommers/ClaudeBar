@@ -87,6 +87,15 @@ public struct CodexUsageProbe: UsageProbe {
             ))
         }
 
+        if let secondary = limits.secondary {
+            quotas.append(UsageQuota(
+                percentRemaining: 100 - secondary.usedPercent,  // Allow negative when over quota
+                quotaType: .weekly,
+                providerId: "codex",
+                resetText: secondary.resetDescription
+            ))
+        }
+
         guard !quotas.isEmpty else {
             AppLog.probes.error("Codex probe failed: no rate limits in RPC response")
             throw ProbeError.parseFailed("No rate limits found")
