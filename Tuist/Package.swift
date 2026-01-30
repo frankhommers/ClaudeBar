@@ -9,21 +9,7 @@ let packageSettings = PackageSettings(
     // Customize the product types for specific package product
     // Default is .staticFramework
     // productTypes: ["Alamofire": .framework,]
-    productTypes: [
-        // Build AWS SDK modules as static libraries to properly link internal dependencies
-        "AWSSDKIdentity": .staticLibrary,
-        "AWSCloudWatch": .staticLibrary,
-        "AWSSTS": .staticLibrary,
-        "AWSPricing": .staticLibrary,
-        "AWSSSO": .staticLibrary,
-        "AWSSSOOIDC": .staticLibrary,
-        // Internal AWS modules also need to be static libraries for proper linking
-        "InternalAWSCognitoIdentity": .staticLibrary,
-        "InternalAWSSTS": .staticLibrary,
-        "InternalAWSSSO": .staticLibrary,
-        "InternalAWSSSOOIDC": .staticLibrary,
-        "InternalAWSSignin": .staticLibrary,
-    ]
+    productTypes: [:]
 )
 #endif
 
