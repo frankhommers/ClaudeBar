@@ -394,8 +394,8 @@ jobs:
           VERSION="${{ steps.version.outputs.version }}"
           DOWNLOAD_URL="https://github.com/${{ github.repository }}/releases/download/v${VERSION}/${NOTARIZED_ZIP}"
 
-          # Find sign_update tool
-          SIGN_UPDATE=$(find .build -name "sign_update" -path "*/bin/*" | head -1)
+          # Find sign_update tool (Tuist puts dependencies in Tuist/.build)
+          SIGN_UPDATE=$(find Tuist/.build -name "sign_update" -path "*/Sparkle/bin/*" | head -1)
 
           if [ -z "$SIGN_UPDATE" ]; then
             echo "Warning: sign_update not found, skipping appcast generation"
