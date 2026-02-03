@@ -115,11 +115,11 @@ public struct ClaudeAPIUsageProbe: UsageProbe, @unchecked Sendable {
 
                 if errorResponse.error == "invalid_grant" {
                     AppLog.probes.error("Claude API: Session expired (invalid_grant) - run `claude` to re-authenticate")
-                    throw ProbeError.authenticationRequired
+                    throw ProbeError.sessionExpired
                 }
             }
             AppLog.probes.error("Claude API: Token expired or invalid (HTTP \(httpResponse.statusCode))")
-            throw ProbeError.authenticationRequired
+            throw ProbeError.sessionExpired
         }
 
         guard httpResponse.statusCode >= 200, httpResponse.statusCode < 300 else {
