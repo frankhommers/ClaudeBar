@@ -20,7 +20,8 @@ public struct ClaudeAPIUsageProbe: UsageProbe, @unchecked Sendable {
     // OAuth configuration (from Claude Code)
     // client_id being used here is the official client_id being used for Claude Code CLI. It might be changed if Claude Code got updated.
     private static let clientID = "9d1c250a-e61b-44d9-88ed-5944d1962f5e"
-    private static let scopes = "user:profile user:inference user:sessions:claude_code user:mcp_servers"
+    // Only request scopes that are typically granted - do NOT add extra scopes like user:mcp_servers
+    private static let scopes = "user:profile user:inference user:sessions:claude_code"
 
     public init(
         credentialLoader: ClaudeCredentialLoader = ClaudeCredentialLoader(),
@@ -103,14 +104,21 @@ public struct ClaudeAPIUsageProbe: UsageProbe, @unchecked Sendable {
 
         // Handle error responses
         if httpResponse.statusCode == 400 || httpResponse.statusCode == 401 {
-            // Check for invalid_grant error
+            // Log raw response for debugging
+            if let rawBody = String(data: data, encoding: .utf8) {
+                AppLog.probes.debug("Claude API: Token refresh error response: \(rawBody)")
+            }
+
+            // Check for specific OAuth errors
             if let errorResponse = try? JSONDecoder().decode(TokenErrorResponse.self, from: data) {
+                AppLog.probes.error("Claude API: Token refresh failed - error: \(errorResponse.error ?? "unknown"), description: \(errorResponse.errorDescription ?? "none")")
+
                 if errorResponse.error == "invalid_grant" {
-                    AppLog.probes.error("Claude API: Session expired (invalid_grant)")
+                    AppLog.probes.error("Claude API: Session expired (invalid_grant) - run `claude` to re-authenticate")
                     throw ProbeError.authenticationRequired
                 }
             }
-            AppLog.probes.error("Claude API: Token expired or invalid")
+            AppLog.probes.error("Claude API: Token expired or invalid (HTTP \(httpResponse.statusCode))")
             throw ProbeError.authenticationRequired
         }
 
