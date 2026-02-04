@@ -151,6 +151,32 @@ let project = Project(
                 ]
             )
         ),
+
+        // MARK: - Acceptance Tests (BDD - Outer Loop)
+        .target(
+            name: "AcceptanceTests",
+            destinations: .macOS,
+            product: .unitTests,
+            bundleId: "com.tddworks.claudebar.acceptance-tests",
+            deploymentTargets: .macOS("15.0"),
+            sources: ["Tests/AcceptanceTests/**"],
+            dependencies: [
+                .target(name: "Domain"),
+                .target(name: "Infrastructure"),
+                .external(name: "Mockable"),
+                .external(name: "AWSCloudWatch"),
+                .external(name: "AWSSTS"),
+                .external(name: "AWSPricing"),
+                .external(name: "AWSSDKIdentity"),
+                .external(name: "AWSSSO"),
+                .external(name: "AWSSSOOIDC"),
+            ],
+            settings: .settings(
+                base: [
+                    "SWIFT_ACTIVE_COMPILATION_CONDITIONS": "MOCKING",
+                ]
+            )
+        ),
     ],
     schemes: [
         .scheme(
@@ -159,6 +185,7 @@ let project = Project(
             buildAction: .buildAction(targets: ["ClaudeBar"]),
             testAction: .targets(
                 [
+                    .testableTarget(target: .target("AcceptanceTests")),
                     .testableTarget(target: .target("DomainTests")),
                     .testableTarget(target: .target("InfrastructureTests")),
                 ],
