@@ -2286,7 +2286,11 @@ struct DisplayModeButton: View {
     @State private var isHovering = false
 
     private var iconName: String {
-        mode == .remaining ? "arrow.down.right" : "arrow.up.right"
+        switch mode {
+        case .remaining: "arrow.down.right"
+        case .used: "arrow.up.right"
+        case .pace: "gauge.with.needle.fill"
+        }
     }
 
     var body: some View {

@@ -770,6 +770,30 @@ extension QuotaStatus {
     }
 }
 
+// MARK: - UsagePace Theme Extension
+
+extension UsagePace {
+    /// Display color for pace indicators
+    var displayColor: Color {
+        switch self {
+        case .onPace: .green
+        case .ahead: .orange
+        case .behind: AppTheme.tealBright
+        case .unknown: .secondary
+        }
+    }
+
+    /// Adaptive display color for pace indicators
+    func themeColor(for scheme: ColorScheme) -> Color {
+        switch self {
+        case .onPace: AppTheme.statusHealthy(for: scheme)
+        case .ahead: AppTheme.statusWarning(for: scheme)
+        case .behind: AppTheme.tealBright(for: scheme)
+        case .unknown: AppTheme.textSecondary(for: scheme)
+        }
+    }
+}
+
 // MARK: - BudgetStatus Theme Extension
 
 extension BudgetStatus {

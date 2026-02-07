@@ -62,23 +62,58 @@ enum Shell: Sendable, Equatable {
     // MARK: - Output Parsing
 
     func parseWhichOutput(_ output: String) -> String? {
-        let trimmed = output.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return nil }
+        let cleaned = Self.stripEscapeSequences(output)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleaned.isEmpty else { return nil }
 
         switch self {
         case .posix, .fish:
-            return trimmed
+            return cleaned
         case .nushell:
             // Reject table output that may have leaked through (check for box-drawing chars)
             let tableChars = CharacterSet(charactersIn: "│╭╮╯╰─┼┤├┬┴┌┐└┘")
-            if trimmed.rangeOfCharacter(from: tableChars) != nil {
+            if cleaned.rangeOfCharacter(from: tableChars) != nil {
                 return nil
             }
-            return trimmed
+            return cleaned
         }
     }
 
+    /// Strips ANSI escape sequences and OSC (Operating System Command) sequences
+    /// that terminal emulators like iTerm2 inject via shell integration.
+    private static func stripEscapeSequences(_ string: String) -> String {
+        // Strip OSC sequences: ESC ] ... ST (where ST is ESC \ or BEL)
+        // Also handle bare ] without ESC prefix (iTerm2 shell integration)
+        var result = string
+        // ESC ] ... (ESC \ | BEL)
+        result = result.replacingOccurrences(
+            of: "\\e\\].*?(?:\\e\\\\|\\u{07})",
+            with: "",
+            options: .regularExpression
+        )
+        // \x1b] ... (\x1b\ | \x07)
+        result = result.replacingOccurrences(
+            of: "\\x1b\\].*?(?:\\x1b\\\\|\\x07)",
+            with: "",
+            options: .regularExpression
+        )
+        // Bare ]NNNN;...  (iTerm2 sequences without ESC prefix)
+        result = result.replacingOccurrences(
+            of: "\\]\\d+;[^\n]*?(?=\\/|$)",
+            with: "",
+            options: .regularExpression
+        )
+        // Standard ANSI CSI sequences: ESC [ ... (letter)
+        result = result.replacingOccurrences(
+            of: "\\x1b\\[[0-9;]*[A-Za-z]",
+            with: "",
+            options: .regularExpression
+        )
+        return result
+    }
+
     func parsePathOutput(_ output: String) -> String {
-        output.trimmingCharacters(in: .whitespacesAndNewlines)
+        Self.stripEscapeSequences(output)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }

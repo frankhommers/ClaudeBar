@@ -696,8 +696,21 @@ struct WrappedStatCard: View {
         settings.usageDisplayMode
     }
 
+    /// Effective display mode: falls back to .used when pace is unknown
+    private var effectiveDisplayMode: UsageDisplayMode {
+        if displayMode == .pace && quota.pace == .unknown {
+            return .used
+        }
+        return displayMode
+    }
+
     private var statusColor: Color {
         theme.statusColor(for: quota.status)
+    }
+
+    /// The color used for the pace label/number
+    private var paceColor: Color {
+        quota.pace.displayColor
     }
 
     var body: some View {
@@ -718,34 +731,51 @@ struct WrappedStatCard: View {
 
                 Spacer(minLength: 4)
 
-                // Status badge - fixed size, won't wrap
-                Text(quota.status.badgeText)
-                    .badge(statusColor)
+                // Status badge - pace mode shows pace badge, others show status
+                if effectiveDisplayMode == .pace {
+                    Text(quota.pace.displayName.uppercased())
+                        .badge(paceColor)
+                } else {
+                    Text(quota.status.badgeText)
+                        .badge(statusColor)
+                }
             }
 
-            // Large percentage number with "Remaining"/"Used" label (end-aligned)
+            // Large percentage number with label (end-aligned)
             HStack(alignment: .firstTextBaseline) {
                 HStack(alignment: .firstTextBaseline, spacing: 1) {
-                    Text("\(Int(quota.displayPercent(mode: displayMode)))")
+                    Text("\(Int(quota.displayPercent(mode: effectiveDisplayMode)))")
                         .font(.system(size: 32, weight: .bold, design: theme.fontDesign))
-                        .foregroundStyle(theme.textPrimary)
+                        .foregroundStyle(effectiveDisplayMode == .pace ? paceColor : theme.textPrimary)
                         .contentTransition(.numericText())
 
                     Text("%")
                         .font(.system(size: 16, weight: .medium, design: theme.fontDesign))
-                        .foregroundStyle(theme.textTertiary)
+                        .foregroundStyle(effectiveDisplayMode == .pace ? paceColor.opacity(0.7) : theme.textTertiary)
                 }
 
                 Spacer()
 
-                Text(displayMode.displayLabel)
+                Text(effectiveDisplayMode.displayLabel)
                     .font(.system(size: 12, weight: .medium, design: theme.fontDesign))
-                    .foregroundStyle(theme.textTertiary)
+                    .foregroundStyle(effectiveDisplayMode == .pace ? paceColor.opacity(0.8) : theme.textTertiary)
+            }
+
+            // Pace insight line
+            if effectiveDisplayMode == .pace, let insight = quota.paceInsight {
+                HStack(spacing: 3) {
+                    Image(systemName: "lightbulb.fill")
+                        .font(.system(size: 7))
+                    Text(insight)
+                        .font(.system(size: 8, weight: .medium, design: theme.fontDesign))
+                }
+                .foregroundStyle(paceColor.opacity(0.8))
+                .lineLimit(1)
             }
 
             // Progress bar with gradient
             GeometryReader { geo in
-                let progressPercent = quota.displayProgressPercent(mode: displayMode)
+                let progressPercent = quota.displayProgressPercent(mode: effectiveDisplayMode)
                 ZStack(alignment: .leading) {
                     // Track
                     RoundedRectangle(cornerRadius: 3)

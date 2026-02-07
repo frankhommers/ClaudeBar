@@ -202,4 +202,24 @@ struct UsageQuotaTests {
         // When & Then
         #expect(quota.displayProgressPercent(mode: .used) == 25)
     }
+
+    // MARK: - Display Percent (Pace Mode)
+
+    @Test
+    func `displayPercent returns percentRemaining in pace mode`() {
+        // Given - pace mode shows familiar remaining number
+        let quota = UsageQuota(percentRemaining: 75, quotaType: .session, providerId: "claude")
+
+        // When & Then
+        #expect(quota.displayPercent(mode: .pace) == 75)
+    }
+
+    @Test
+    func `displayProgressPercent returns percentRemaining in pace mode`() {
+        // Given
+        let quota = UsageQuota(percentRemaining: 75, quotaType: .session, providerId: "claude")
+
+        // When & Then - pace mode progress bar shows remaining (same as remaining mode)
+        #expect(quota.displayProgressPercent(mode: .pace) == 75)
+    }
 }

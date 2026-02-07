@@ -12,6 +12,14 @@ struct QuotaCardView: View {
         settings.usageDisplayMode
     }
 
+    /// Effective display mode: falls back to .used when pace is unknown
+    private var effectiveDisplayMode: UsageDisplayMode {
+        if displayMode == .pace && quota.pace == .unknown {
+            return .used
+        }
+        return displayMode
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             // Label
@@ -20,14 +28,14 @@ struct QuotaCardView: View {
                 .foregroundStyle(.secondary)
 
             // Percentage
-            Text("\(Int(quota.displayPercent(mode: displayMode)))%")
+            Text("\(Int(quota.displayPercent(mode: effectiveDisplayMode)))%")
                 .font(.title2)
                 .fontWeight(.semibold)
-                .foregroundStyle(quota.status.displayColor)
+                .foregroundStyle(effectiveDisplayMode == .pace ? quota.pace.displayColor : quota.status.displayColor)
 
             // Progress bar
             GeometryReader { geometry in
-                let progressPercent = quota.displayProgressPercent(mode: displayMode)
+                let progressPercent = quota.displayProgressPercent(mode: effectiveDisplayMode)
                 ZStack(alignment: .leading) {
                     // Track
                     RoundedRectangle(cornerRadius: 2)

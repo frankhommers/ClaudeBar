@@ -60,20 +60,64 @@ public struct UsageQuota: Sendable, Equatable, Hashable, Comparable {
     /// Returns the display percentage based on the display mode.
     /// - In `.remaining` mode: returns `percentRemaining`
     /// - In `.used` mode: returns `percentUsed` (100 - percentRemaining)
+    /// - In `.pace` mode: returns `percentRemaining` (familiar number, with pace context from badge + insight)
     public func displayPercent(mode: UsageDisplayMode) -> Double {
         switch mode {
         case .remaining: percentRemaining
         case .used: percentUsed
+        case .pace: percentRemaining
         }
     }
 
     /// Returns the percentage to use for progress bar width based on the display mode.
     /// - In `.remaining` mode: bar fills from right to left as quota depletes
     /// - In `.used` mode: bar fills from left to right as quota is consumed
+    /// - In `.pace` mode: bar shows remaining (same as remaining mode)
     public func displayProgressPercent(mode: UsageDisplayMode) -> Double {
         switch mode {
         case .remaining: percentRemaining
         case .used: percentUsed
+        case .pace: percentRemaining
+        }
+    }
+
+    // MARK: - Pace
+
+    /// The percentage of the reset period that has elapsed (0-100), or nil if no reset time is known.
+    ///
+    /// Calculated as: `(totalDuration - timeUntilReset) / totalDuration * 100`
+    public var percentTimeElapsed: Double? {
+        guard let timeUntilReset else { return nil }
+        let totalDuration = quotaType.duration.seconds
+        guard totalDuration > 0 else { return nil }
+        let elapsed = totalDuration - timeUntilReset
+        return min(100, max(0, elapsed / totalDuration * 100))
+    }
+
+    /// The difference between actual usage and expected usage based on time elapsed.
+    /// Positive means ahead (consuming faster), negative means behind (room to spare).
+    /// Returns nil if time-based pace cannot be determined.
+    public var pacePercent: Double? {
+        guard let percentTimeElapsed else { return nil }
+        return percentUsed - percentTimeElapsed
+    }
+
+    /// The pace classification for this quota.
+    public var pace: UsagePace {
+        guard let pacePercent, let percentTimeElapsed else { return .unknown }
+        return UsagePace.from(percentUsed: percentUsed, percentTimeElapsed: percentTimeElapsed)
+    }
+
+    /// A human-readable insight about the pace deviation (e.g., "37% below expected usage").
+    /// Returns nil when pace cannot be determined.
+    public var paceInsight: String? {
+        guard let pacePercent, pace != .unknown else { return nil }
+        let delta = Int(abs(pacePercent))
+        switch pace {
+        case .behind: return "\(delta)% below expected usage"
+        case .ahead: return "\(delta)% above expected usage"
+        case .onPace: return "Right on track"
+        case .unknown: return nil
         }
     }
 
